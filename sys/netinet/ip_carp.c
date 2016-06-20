@@ -581,27 +581,89 @@ carp6_input(struct mbuf **mp, int *offp, int proto)
 }
 #endif /* INET6 */
 
+/*
+ * This routine should not be necessary at all, but some switches
+ * (VMWare ESX vswitches) can echo our own packets back at us,
+ * and we must ignore them or they will cause us to drop out of
+ * MASTER mode.
+ *
+ * We cannot catch all cases of network loops.  Instead, what we
+ * do here is catch any packet that arrives with a carp header
+ * with a VHID of 0, that comes from an address that is our own.
+ * These packets are by definition "from us" (even if they are from
+ * a misconfigured host that is pretending to be us).
+ *
+ * The VHID test is outside this mini-function.
+ */
+static int
+carp_source_is_self(struct mbuf *m, struct ifaddr *ifa, sa_family_t af)
+{
+	struct ip *ip4;
+	struct in_addr in4;
+	struct ip6_hdr *ip6;
+	struct in6_addr in6;
+
+	switch (af) {
+	case AF_INET:
+		ip4 = mtod(m, struct ip *);
+		in4 = ifatoia(ifa)->ia_addr.sin_addr;
+		return (in4.s_addr == ip4->ip_src.s_addr);
+
+	case AF_INET6:
+		ip6 = mtod(m, struct ip6_hdr *);
+		in6 = ifatoia6(ifa)->ia_addr.sin6_addr;
+		return (memcmp(&in6, &ip6->ip6_src, sizeof(in6)) == 0);
+
+	default:		/* how did this happen? */
+		break;
+	}
+	return (0);
+}
+
 static void
 carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af)
 {
 	struct ifnet *ifp = m->m_pkthdr.rcvif;
-	struct ifaddr *ifa;
+	struct ifaddr *ifa, *match;
 	struct carp_softc *sc;
 	uint64_t tmp_counter;
 	struct timeval sc_tv, ch_tv;
 
-	/* verify that the VHID is valid on the receiving interface */
+	/*
+	 * Verify that the VHID is valid on the receiving interface.
+	 *
+	 * There should be just one match.  If there are none
+	 * the VHID is not valid and we drop the packet.  If
+	 * there are multiple VHID matches, take just the first
+	 * one, for compatibility with previous code.  While we're
+	 * scanning, check for obvious loops in the network topology
+	 * (these should never happen, and as noted above, we may
+	 * miss real loops; this is just a double-check).
+	 */
 	IF_ADDR_RLOCK(ifp);
-	IFNET_FOREACH_IFA(ifp, ifa)
-		if (ifa->ifa_addr->sa_family == af &&
-		    ifa->ifa_carp->sc_vhid == ch->carp_vhid) {
-			ifa_ref(ifa);
-			break;
-		}
+	error = 0;
+	match = NULL;
+	IFNET_FOREACH_IFA(ifp, ifa) {
+		if (match == NULL && ifa->ifa_carp != NULL &&
+		    ifa->ifa_addr->sa_family == af &&
+		    ifa->ifa_carp->sc_vhid == ch->carp_vhid)
+			match = ifa;
+		if (ch->carp_vhid == 0 && carp_source_is_self(m, ifa, af))
+			error = ELOOP;
+	}
+	ifa = error ? NULL : match;
+	if (ifa != NULL)
+		ifa_ref(ifa);
 	IF_ADDR_RUNLOCK(ifp);
 
 	if (ifa == NULL) {
-		CARPSTATS_INC(carps_badvhid);
+		if (error == ELOOP) {
+			CARP_DEBUG("dropping looped packet on interface %s\n",
+			    ifp->if_xname);
+			CARPSTATS_INC(carps_badif);	/* ??? */
+		} else {
+			CARPSTATS_INC(carps_badvhid);
+		}
 		m_freem(m);
 		return;
 	}
