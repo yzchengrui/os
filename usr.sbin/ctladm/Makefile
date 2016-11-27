@@ -7,6 +7,7 @@ SRCS=		ctladm.c util.c ctl_util.c ctl_scsi_all.c
 .PATH:		${SRCTOP}/sys/cam/ctl
 SDIR=		${SRCTOP}/sys
 CFLAGS+=	-I${SDIR}
+#CFLAGS+=	-I${SDIR} -g -O0
 # This is necessary because of these warnings:
 # warning: cast increases required alignment of target type
 # The solution is to either upgrade the compiler (preferred), or do void
