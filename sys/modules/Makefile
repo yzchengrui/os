@@ -689,8 +689,6 @@ _ixlv=		ixlv
 _linux64=	linux64
 _linux_common=	linux_common
 _ntb=		ntb
-<<<<<<< HEAD
-=======
 _nvd=		nvd
 _nvdimm=	nvdimm
 .if ${MK_SOURCELESS_HOST} != "no"
@@ -706,7 +704,6 @@ _opensolaris=	opensolaris
 _padlock=	padlock
 .endif
 _pccard=	pccard
->>>>>>> ca014fb... Initial import of the legacy NVDIMM driver.
 _pms=		pms
 _qlxge=		qlxge
 _qlxgb=		qlxgb
