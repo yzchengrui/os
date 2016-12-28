@@ -628,6 +628,7 @@ carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af)
 	struct carp_softc *sc;
 	uint64_t tmp_counter;
 	struct timeval sc_tv, ch_tv;
+	int error;
 
 	/*
 	 * Verify that the VHID is valid on the receiving interface.
