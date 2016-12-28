@@ -281,7 +281,6 @@ SUBDIR=	\
 	${_ntb} \
 	${_nvd} \
 	${_nvdimm} \
-	${_nve} \
 	${_nvme} \
 	${_nvram} \
 	${_nxge} \
