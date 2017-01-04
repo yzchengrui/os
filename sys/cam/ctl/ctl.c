@@ -2924,10 +2924,8 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 				break;
 			}
 
-			if (packed_len > lun_req->result_len) {
-				copyout(packed, lun_req->result,
-				    lun_req->result_len);
-			}
+			if (packed_len <= lun_req->result_len)
+				copyout(packed, lun_req->result, packed_len);
 
 			free(packed, M_NVLIST);
 			nvlist_destroy(lun_req->result_nvl);
@@ -3187,10 +3185,8 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 				break;
 			}
 
-			if (packed_len <= req->result_len) {
-				copyout(packed, req->result,
-				    req->result_len);
-			}
+			if (packed_len <= lun_req->result_len)
+				copyout(packed, lun_req->result, packed_len);
 
 			free(packed, M_NVLIST);
 			nvlist_destroy(req->result_nvl);
