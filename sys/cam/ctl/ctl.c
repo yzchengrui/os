@@ -9942,7 +9942,8 @@ ctl_inquiry_evpd_block_limits(struct ctl_scsiio *ctsio, int alloc_len)
 			ival = 0xffffffff;
 			val = dnvlist_get_string(lun->be_lun->options,
 			    "unmap_max_lba", NULL);
-			ctl_expand_number(val, &ival);
+			if (val != NULL)
+				ctl_expand_number(val, &ival);
 			scsi_ulto4b(ival, bl_ptr->max_unmap_lba_cnt);
 			ival = 0xffffffff;
 			val = dnvlist_get_string(lun->be_lun->options,
@@ -9966,7 +9967,8 @@ ctl_inquiry_evpd_block_limits(struct ctl_scsiio *ctsio, int alloc_len)
 		ival = UINT64_MAX;
 		val = dnvlist_get_string(lun->be_lun->options,
 		    "write_same_max_lba", NULL);
-		ctl_expand_number(val, &ival);
+		if (val != NULL)
+			ctl_expand_number(val, &ival);
 		scsi_u64to8b(ival, bl_ptr->max_write_same_length);
 	}
 
