@@ -49,6 +49,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/endian.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
+#include <sys/nv.h>
+#include <sys/dnv.h>
 
 #include <cam/scsi/scsi_all.h>
 #include <cam/scsi/scsi_da.h>
@@ -194,8 +196,8 @@ error:
 	}
 	port->ctl_pool_ref = pool;
 
-	if (port->options.stqh_first == NULL)
-		STAILQ_INIT(&port->options);
+	if (port->options == NULL)
+		port->options = nvlist_create(0);
 
 	mtx_lock(&softc->ctl_lock);
 	port->targ_port = port_num;
@@ -239,7 +241,7 @@ ctl_port_deregister(struct ctl_port *port)
 	mtx_unlock(&softc->ctl_lock);
 
 	ctl_pool_free(pool);
-	ctl_free_opts(&port->options);
+	nvlist_destroy(port->options);
 
 	ctl_lun_map_deinit(port);
 	free(port->port_devid, M_CTL);
@@ -330,7 +332,7 @@ ctl_port_online(struct ctl_port *port)
 		port->port_online(port->onoff_arg);
 	mtx_lock(&softc->ctl_lock);
 	if (softc->is_single == 0) {
-		value = ctl_get_opt(&port->options, "ha_shared");
+		value = dnvlist_get_string(port->options, "ha_shared", NULL);
 		if (value != NULL && strcmp(value, "on") == 0)
 			port->status |= CTL_PORT_STATUS_HA_SHARED;
 		else

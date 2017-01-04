@@ -39,6 +39,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
+#include <sys/nv.h>
+#include <sys/dnv.h>
 #include <machine/atomic.h>
 
 #include <cam/cam.h>
@@ -1637,7 +1639,7 @@ ctl_extended_copy_lid1(struct ctl_scsiio *ctsio)
 	struct ctl_lun *lun;
 	struct tpc_list *list, *tlist;
 	uint8_t *ptr;
-	char *value;
+	const char *value;
 	int len, off, lencscd, lenseg, leninl, nseg;
 
 	CTL_DEBUG_PRINT(("ctl_extended_copy_lid1\n"));
@@ -1702,7 +1704,7 @@ ctl_extended_copy_lid1(struct ctl_scsiio *ctsio)
 
 	list = malloc(sizeof(struct tpc_list), M_CTL, M_WAITOK | M_ZERO);
 	list->service_action = cdb->service_action;
-	value = ctl_get_opt(&lun->be_lun->options, "insecure_tpc");
+	value = dnvlist_get_string(lun->be_lun->options, "insecure_tpc", NULL);
 	if (value != NULL && strcmp(value, "on") == 0)
 		list->init_port = -1;
 	else
@@ -1770,7 +1772,7 @@ ctl_extended_copy_lid4(struct ctl_scsiio *ctsio)
 	struct ctl_lun *lun;
 	struct tpc_list *list, *tlist;
 	uint8_t *ptr;
-	char *value;
+	const char *value;
 	int len, off, lencscd, lenseg, leninl, nseg;
 
 	CTL_DEBUG_PRINT(("ctl_extended_copy_lid4\n"));
@@ -1835,7 +1837,7 @@ ctl_extended_copy_lid4(struct ctl_scsiio *ctsio)
 
 	list = malloc(sizeof(struct tpc_list), M_CTL, M_WAITOK | M_ZERO);
 	list->service_action = cdb->service_action;
-	value = ctl_get_opt(&lun->be_lun->options, "insecure_tpc");
+	value = dnvlist_get_string(lun->be_lun->options, "insecure_tpc", NULL);
 	if (value != NULL && strcmp(value, "on") == 0)
 		list->init_port = -1;
 	else

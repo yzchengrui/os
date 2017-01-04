@@ -14,7 +14,7 @@ CFLAGS+=	-I${SDIR} -g -O0
 WARNS?= 3
 .endif
 
-LIBADD=		cam sbuf bsdxml util
+LIBADD=		cam sbuf bsdxml util nv
 MAN=		ctladm.8
 
 .include <bsd.prog.mk>

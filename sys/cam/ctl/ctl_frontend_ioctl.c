@@ -41,6 +41,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
+#include <sys/nv.h>
+#include <sys/dnv.h>
 
 #include <cam/cam.h>
 #include <cam/scsi/scsi_all.h>
@@ -165,31 +167,31 @@ cfi_ioctl_port_create(struct ctl_req *req)
 	struct ctl_port *port;
 	struct make_dev_args args;
 	struct cdev *dev;
-	ctl_options_t opts;
 	int retval;
-	int64_t port_num = 0;
+	int pp, vp;
 
-	ctl_init_opts(&opts, req->num_args, req->kern_args);
-	retval = ctl_get_opt_number(&opts, "pp", (uint64_t *)&port_num);
-	ctl_free_opts(&opts);
+	pp = (int)dnvlist_get_number(req->args_nvl, "pp", -1);
+	vp = (int)dnvlist_get_number(req->args_nvl, "vp", 0);
 
-	if (retval >= 0 && port_num != -1) {
+	if (pp != -1) {
 		/* Check for duplicates */
 		TAILQ_FOREACH(cfi, &isoftc->ports, link) {
-			if (port_num == cfi->port.physical_port) {
+			if (pp == cfi->port.physical_port && 
+			    vp == cfi->port.virtual_port) {
 				req->status = CTL_LUN_ERROR;
 				snprintf(req->error_str, sizeof(req->error_str),
-				    "port %ld already exists", port_num);
+				    "port %d already exists", pp);
+
 				return;
 			}
 		}
 	} else {
 		/* Find free port number */
 		TAILQ_FOREACH(cfi, &isoftc->ports, link) {
-			port_num = MAX(port_num, cfi->port.physical_port);
+			pp = MAX(pp, cfi->port.physical_port);
 		}
 
-		port_num++;
+		pp++;
 	}
 
 	cfi = malloc(sizeof(*cfi), M_CTL, M_WAITOK | M_ZERO);
@@ -202,7 +204,8 @@ cfi_ioctl_port_create(struct ctl_req *req)
 	port->fe_done = cfi_done;
 	port->max_targets = 1;
 	port->max_target_id = 15;
-	port->physical_port = (int)port_num;
+	port->physical_port = pp;
+	port->virtual_port = vp;
 	port->targ_port = -1;
 
 	retval = ctl_port_register(port);
@@ -214,6 +217,8 @@ cfi_ioctl_port_create(struct ctl_req *req)
 		return;
 	}
 
+	req->result_nvl = nvlist_create(0);
+	nvlist_add_number(req->result_nvl, "port_id", port->targ_port);
 	ctl_port_online(port);
 
 	make_dev_args_init(&args);
@@ -224,7 +229,7 @@ cfi_ioctl_port_create(struct ctl_req *req)
 	args.mda_si_drv1 = NULL;
 	args.mda_si_drv2 = cfi;
 
-	retval = make_dev_s(&args, &dev, "cam/ctl%ld", port_num);
+	retval = make_dev_s(&args, &dev, "cam/ctl%d", pp);
 	if (retval != 0) {
 		req->status = CTL_LUN_ERROR;
 		snprintf(req->error_str, sizeof(req->error_str),
@@ -242,30 +247,26 @@ cfi_ioctl_port_remove(struct ctl_req *req)
 {
 	struct cfi_softc *isoftc = &cfi_softc;
 	struct cfi_port *cfi = NULL;
-	ctl_options_t opts;
-	uint64_t port_num;
-	int retval;
+	int port_id;
 
-	ctl_init_opts(&opts, req->num_args, req->kern_args);
-	retval = ctl_get_opt_number(&opts, "pp", &port_num);
-	ctl_free_opts(&opts);
+	port_id = (int)dnvlist_get_number(req->args_nvl, "port_id", -1);
 
-	if (retval < 0) {
+	if (port_id == -1) {
 		req->status = CTL_LUN_ERROR;
 		snprintf(req->error_str, sizeof(req->error_str),
-		    "pp not provided");
+		    "port_id not provided");
 		return;
 	}
 
 	TAILQ_FOREACH(cfi, &isoftc->ports, link) {
-		if (cfi->port.physical_port == port_num)
+		if (cfi->port.targ_port == port_id)
 			break;
 	}
 
 	if (cfi == NULL) {
 		req->status = CTL_LUN_ERROR;
 		snprintf(req->error_str, sizeof(req->error_str),
-		    "cannot find port %ld", port_num);
+		    "cannot find port %d", port_id);
 
 		return;
 	}

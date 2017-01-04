@@ -152,7 +152,7 @@ struct port {
 	struct pport			*p_pport;
 	struct target			*p_target;
 	int				p_foreign;
-
+	int				p_ioctl_port;
 	uint32_t			p_ctl_port;
 };
 

@@ -1232,6 +1232,7 @@ port_new(struct conf *conf, struct target *target, struct portal_group *pg)
 		log_err(1, "calloc");
 	port->p_conf = conf;
 	port->p_name = name;
+	port->p_ioctl_port = -1;
 	TAILQ_INSERT_TAIL(&conf->conf_ports, port, p_next);
 	TAILQ_INSERT_TAIL(&target->t_ports, port, p_ts);
 	port->p_target = target;
