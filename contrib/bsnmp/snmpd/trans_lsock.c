@@ -4,7 +4,7 @@
  *	All rights reserved.
  *
  * Author: Harti Brandt <harti@freebsd.org>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -59,7 +59,7 @@ static void lsock_close_port(struct tport *);
 static int lsock_init_port(struct tport *);
 static ssize_t lsock_send(struct tport *, const u_char *, size_t,
     const struct sockaddr *, size_t);
-static ssize_t lsock_recv(struct port_input *);
+static ssize_t lsock_recv(struct tport *, struct port_input *);
 
 /* exported */
 const struct transport_def lsock_trans = {
@@ -444,7 +444,7 @@ check_priv_stream(struct port_input *pi)
  * Receive something
  */
 static ssize_t
-lsock_recv(struct port_input *pi)
+lsock_recv(struct tport *tp __unused, struct port_input *pi)
 {
 	struct msghdr msg;
 	struct iovec iov[1];
