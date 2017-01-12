@@ -816,30 +816,20 @@ uipc_finalizecontrol(struct socket *so, int flags, struct mbuf **pcontrol,
 
 	/*
 	 * If not connected, we're done now (might be auto-connect
-	 * on send, leave everything to caller).  Otherwise, handle
-	 * one-shot credentials on stream and seqpacket sockets here.
-	 *
-	 * XXX If the send fails, we never get another chance.
-	 * We could restore UNP_WANTCRED if the unp_addsockcred()
-	 * call fails here but we can't handle the more likely
-	 * entire-send-fails case.  Deferring clearing the flag
-	 * is not a great solution either.  Perhaps best would be
-	 * to have an additional UNP_CREDS_SENT_SUCCESSFULLY flag
-	 * and check that here.  For now, just leave it this way.
+	 * on send, leave everything to caller).  Otherwise, add
+	 * credentials if requested.  Note that stream style sockets
+	 * auto-clear the request; datagram-style sockets don't.
 	 */
 	if (unp2 == NULL)
 		return (0);
 
 	oneshot = so->so_type == SOCK_SEQPACKET ||
 	    so->so_type == SOCK_STREAM;
-	if (oneshot) {
-		UNP_PCB_LOCK(unp2);
-		wantcred = (unp2->unp_flags & UNP_WANTCRED) != 0;
+	UNP_PCB_LOCK(unp2);
+	wantcred = (unp2->unp_flags & UNP_WANTCRED) != 0;
+	if (wantcred && oneshot)
 		unp2->unp_flags &= ~UNP_WANTCRED;
-		UNP_PCB_UNLOCK(unp2);
-	} else {
-		wantcred = true;
-	}
+	UNP_PCB_UNLOCK(unp2);
 
 	if (wantcred)
 		error = unp_addsockcred(pcontrol, td);
