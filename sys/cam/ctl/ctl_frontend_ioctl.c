@@ -229,7 +229,7 @@ cfi_ioctl_port_create(struct ctl_req *req)
 	args.mda_si_drv1 = NULL;
 	args.mda_si_drv2 = cfi;
 
-	retval = make_dev_s(&args, &dev, "cam/ctl%d", pp);
+	retval = make_dev_s(&args, &dev, "cam/ctl%d.%d", pp, vp);
 	if (retval != 0) {
 		req->status = CTL_LUN_ERROR;
 		snprintf(req->error_str, sizeof(req->error_str),
