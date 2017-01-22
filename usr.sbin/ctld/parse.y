@@ -777,32 +777,30 @@ target_port:	PORT STR
 				free($2);
 				return (1);
 			}
-
-			free($2);
-			return (0);
+		} else {
+			pp = pport_find(conf, $2);
+			if (pp == NULL) {
+				log_warnx("unknown port \"%s\" for target \"%s\"",
+				    $2, target->t_name);
+				free($2);
+				return (1);
+			}
+			if (!TAILQ_EMPTY(&pp->pp_ports)) {
+				log_warnx("can't link port \"%s\" to target \"%s\", "
+				    "port already linked to some target",
+				    $2, target->t_name);
+				free($2);
+				return (1);
+			}
+			tp = port_new_pp(conf, target, pp);
+			if (tp == NULL) {
+				log_warnx("can't link port \"%s\" to target \"%s\"",
+				    $2, target->t_name);
+				free($2);
+				return (1);
+			}
 		}
 
-		pp = pport_find(conf, $2);
-		if (pp == NULL) {
-			log_warnx("unknown port \"%s\" for target \"%s\"",
-			    $2, target->t_name);
-			free($2);
-			return (1);
-		}
-		if (!TAILQ_EMPTY(&pp->pp_ports)) {
-			log_warnx("can't link port \"%s\" to target \"%s\", "
-			    "port already linked to some target",
-			    $2, target->t_name);
-			free($2);
-			return (1);
-		}
-		tp = port_new_pp(conf, target, pp);
-		if (tp == NULL) {
-			log_warnx("can't link port \"%s\" to target \"%s\"",
-			    $2, target->t_name);
-			free($2);
-			return (1);
-		}
 		free($2);
 	}
 	;
