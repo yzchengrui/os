@@ -72,6 +72,8 @@ __FBSDID("$FreeBSD$");
 #include <netdb.h>
 #endif
 
+#define	NVLIST_BUFSIZE	1024
+
 extern bool proxy_mode;
 
 static int	ctl_fd = 0;
@@ -940,7 +942,7 @@ kernel_port_add(struct port *port)
 	struct ctl_lun_map lm;
 	struct target *targ = port->p_target;
 	struct portal_group *pg = port->p_portal_group;
-	struct nvlist *args;
+	char result_buf[NVLIST_BUFSIZE];
 	int error, i;
 
 	/* Create iSCSI port. */
@@ -950,30 +952,40 @@ kernel_port_add(struct port *port)
 		req.reqtype = CTL_REQ_CREATE;
 
 		if (port->p_portal_group) {
-			args = nvlist_create(0);
-			nvlist_add_string(args, "cfiscsi_target", targ->t_name);
-			nvlist_add_string(args, "cfiscsi_portal_group_name",
-			    pg->pg_name);
-			nvlist_add_number(args, "cfiscsi_portal_group_tag",
-			    pg->pg_tag);
+			req.args_nvl = nvlist_create(0);
+			nvlist_add_string(req.args_nvl, "cfiscsi_target",
+			    targ->t_name);
+			nvlist_add_string(req.args_nvl,
+			    "ctld_portal_group_name", pg->pg_name);
+			nvlist_add_number(req.args_nvl,
+			    "cfiscsi_portal_group_tag", pg->pg_tag);
 
 			if (targ->t_alias) {
-				nvlist_add_string(args, "cfiscsi_target_alias",
-				    targ->t_alias);
+				nvlist_add_string(req.args_nvl,
+				    "cfiscsi_target_alias", targ->t_alias);
 			}
 
 			TAILQ_FOREACH(o, &pg->pg_options, o_next)
-				nvlist_add_string(args, o->o_name, o->o_value);
+				nvlist_add_string(req.args_nvl, o->o_name,
+				    o->o_value);
 		}
 
 		if (port->p_ioctl_port != -1) {
-			args = nvlist_create(0);
-			nvlist_add_number(args, "pp", port->p_ioctl_port);
+			req.args_nvl = nvlist_create(0);
+			nvlist_add_number(req.args_nvl, "pp",
+			    port->p_ioctl_port);
 		}
 
-		req.args = nvlist_pack(args, &req.args_len);
+		req.args = nvlist_pack(req.args_nvl, &req.args_len);
+		if (req.args == NULL) {
+			log_warn("error packing nvlist");
+			return (1);
+		}
+
+		req.result = result_buf;
+		req.result_len = sizeof(result_buf);
 		error = ioctl(ctl_fd, CTL_PORT_REQ, &req);
-		nvlist_destroy(args);
+		nvlist_destroy(req.args_nvl);
 
 		if (error != 0) {
 			log_warn("error issuing CTL_PORT_REQ ioctl");
@@ -989,6 +1001,15 @@ kernel_port_add(struct port *port)
 			    req.status);
 			return (1);
 		}
+
+		req.result_nvl = nvlist_unpack(result_buf, req.result_len, 0);
+		if (req.result_nvl == NULL) {
+			log_warnx("error unpacking result nvlist");
+			return (1);
+		}
+
+		port->p_ctl_port = nvlist_get_number(req.result_nvl, "port_id");
+		nvlist_destroy(req.result_nvl);
 	} else if (port->p_pport) {
 		port->p_ctl_port = port->p_pport->pp_ctl_port;
 
@@ -1103,6 +1124,12 @@ kernel_port_remove(struct port *port)
 			    targ->t_name);
 			nvlist_add_number(req.args_nvl, "cfiscsi_portal_group_tag",
 			    pg->pg_tag);
+		}
+
+		req.args = nvlist_pack(req.args_nvl, &req.args_len);
+		if (req.args == NULL) {
+			log_warn("error packing nvlist");
+			return (1);
 		}
 
 		error = ioctl(ctl_fd, CTL_PORT_REQ, &req);
