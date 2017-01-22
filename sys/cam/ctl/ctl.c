@@ -3295,7 +3295,7 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 					sbuf_printf(sb, "%lu", valuei);
 				}
 
-				sbuf_printf(sb, "<%s>\n", name);
+				sbuf_printf(sb, "</%s>\n", name);
 			}
 
 			if (port->lun_map != NULL) {
