@@ -1245,11 +1245,27 @@ port_new(struct conf *conf, struct target *target, struct portal_group *pg)
 struct port *
 port_new_ioctl(struct conf *conf, struct target *target, int pp, int vp)
 {
+	struct pport *pport;
 	struct port *port;
+	char *pname;
 	char *name;
 	int ret;
 
-	ret = asprintf(&name, "ioctl/%d/%d-%s", pp, vp, target->t_name);
+	ret = asprintf(&pname, "ioctl/%d/%d", pp, vp);
+	if (ret <= 0) {
+		log_err(1, "asprintf");
+		return (NULL);
+	}
+
+	pport = pport_find(conf, pname);
+	if (pport != NULL) {
+		free(pname);
+		return (port_new_pp(conf, target, pport));
+	}
+
+	ret = asprintf(&name, "%s-%s", pname, target->t_name);
+	free(pname);
+
 	if (ret <= 0)
 		log_err(1, "asprintf");
 	if (port_find(conf, name) != NULL) {

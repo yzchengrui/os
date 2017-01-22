@@ -946,7 +946,7 @@ kernel_port_add(struct port *port)
 	int error, i;
 
 	/* Create iSCSI port. */
-	if (port->p_portal_group || port->p_ioctl_port != -1) {
+	if (port->p_portal_group || port->p_ioctl_port) {
 		bzero(&req, sizeof(req));
 		req.reqtype = CTL_REQ_CREATE;
 

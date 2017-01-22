@@ -12,6 +12,7 @@ SRCS=		pack.c \
 		connection.c \
 		request.c \
 		log.c \
+		genacl.c \
 		hashtable.c \
 		rfuncs.c \
 		utils.c \
