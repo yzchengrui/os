@@ -166,7 +166,6 @@ cfi_ioctl_port_create(struct ctl_req *req)
 	struct cfi_port *cfi;
 	struct ctl_port *port;
 	struct make_dev_args args;
-	struct cdev *dev;
 	int retval;
 	int pp, vp;
 
@@ -229,7 +228,7 @@ cfi_ioctl_port_create(struct ctl_req *req)
 	args.mda_si_drv1 = NULL;
 	args.mda_si_drv2 = cfi;
 
-	retval = make_dev_s(&args, &dev, "cam/ctl%d.%d", pp, vp);
+	retval = make_dev_s(&args, &cfi->dev, "cam/ctl%d.%d", pp, vp);
 	if (retval != 0) {
 		req->status = CTL_LUN_ERROR;
 		snprintf(req->error_str, sizeof(req->error_str),
@@ -274,6 +273,7 @@ cfi_ioctl_port_remove(struct ctl_req *req)
 	ctl_port_offline(&cfi->port);
 	ctl_port_deregister(&cfi->port);
 	TAILQ_REMOVE(&isoftc->ports, cfi, link);
+	destroy_dev(cfi->dev);
 	free(cfi, M_CTL);
 	req->status = CTL_LUN_OK;
 }
