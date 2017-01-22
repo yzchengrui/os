@@ -2939,6 +2939,7 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 		const char *name, *value;
 		void *cookie = NULL;
 		int type;
+		uint64_t valuei;
 
 		list = (struct ctl_lun_list *)addr;
 
@@ -3067,16 +3068,21 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 
 			while ((name = nvlist_next(lun->be_lun->options, &type,
 			    &cookie)) != NULL) {
-				if (type != NV_TYPE_STRING)
-					continue;
+				sbuf_printf(sb, "\t<%s>", name);
 
-				value = nvlist_get_string(lun->be_lun->options,
-				    name);
-				retval = sbuf_printf(sb, "\t<%s>%s</%s>\n",
-				    name, value, name);
+				if (type == NV_TYPE_STRING) {
+					value = nvlist_get_string(
+					    lun->be_lun->options, name);
+					sbuf_printf(sb, "%s", value);
+				}
 
-				if (retval != 0)
-					break;
+				if (type == NV_TYPE_NUMBER) {
+					valuei = nvlist_get_number(
+					    lun->be_lun->options, name);
+					sbuf_printf(sb, "%lu", valuei);
+				}
+
+				sbuf_printf(sb, "</%s>\n", name);
 			}
 
 			retval = sbuf_printf(sb, "</lun>\n");
