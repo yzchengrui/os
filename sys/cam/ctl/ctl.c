@@ -2927,6 +2927,7 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 			if (packed_len <= lun_req->result_len)
 				copyout(packed, lun_req->result, packed_len);
 
+			lun_req->result_len = packed_len;
 			free(packed, M_NVLIST);
 			nvlist_destroy(lun_req->result_nvl);
 		}
@@ -3185,9 +3186,10 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 				break;
 			}
 
-			if (packed_len <= lun_req->result_len)
-				copyout(packed, lun_req->result, packed_len);
+			if (packed_len <= req->result_len)
+				copyout(packed, req->result, packed_len);
 
+			req->result_len = packed_len;
 			free(packed, M_NVLIST);
 			nvlist_destroy(req->result_nvl);
 		}
@@ -3200,6 +3202,7 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 		const char *name, *value;
 		void *cookie = NULL;
 		int j, type;
+		uint64_t valuei;
 		uint32_t plun;
 
 		list = (struct ctl_lun_list *)addr;
@@ -3278,15 +3281,21 @@ ctl_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 			printf("port_name = %s, port_options = %p\n", port->port_name, port->options);
 			while ((name = nvlist_next(port->options, &type,
 			    &cookie)) != NULL) {
-				if (type != NV_TYPE_STRING)
-					continue;
+				sbuf_printf(sb, "\t<%s>", name);
 
-				value = nvlist_get_string(port->options, name);
-				retval = sbuf_printf(sb, "\t<%s>%s</%s>\n",
-				    name, value, name);
+				if (type == NV_TYPE_STRING) {
+					value = nvlist_get_string(port->options,
+					    name);
+					sbuf_printf(sb, "%s", value);
+				}
 
-				if (retval != 0)
-					break;
+				if (type == NV_TYPE_NUMBER) {
+					valuei = nvlist_get_number(port->options,
+					    name);
+					sbuf_printf(sb, "%lu", valuei);
+				}
+
+				sbuf_printf(sb, "<%s>\n", name);
 			}
 
 			if (port->lun_map != NULL) {
