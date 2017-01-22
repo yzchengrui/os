@@ -153,6 +153,8 @@ struct port {
 	struct target			*p_target;
 	int				p_foreign;
 	int				p_ioctl_port;
+	int				p_ioctl_pp;
+	int				p_ioctl_vp;
 	uint32_t			p_ctl_port;
 };
 
@@ -365,6 +367,8 @@ void			pport_delete(struct pport *pport);
 
 struct port		*port_new(struct conf *conf, struct target *target,
 			    struct portal_group *pg);
+struct port		*port_new_ioctl(struct conf *conf, struct target *target,
+			    int pp, int vp);
 struct port		*port_new_pp(struct conf *conf, struct target *target,
 			    struct pport *pp);
 struct port		*port_find(const struct conf *conf, const char *name);

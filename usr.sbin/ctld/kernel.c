@@ -948,10 +948,10 @@ kernel_port_add(struct port *port)
 	/* Create iSCSI port. */
 	if (port->p_portal_group || port->p_ioctl_port != -1) {
 		bzero(&req, sizeof(req));
-		strlcpy(req.driver, "iscsi", sizeof(req.driver));
 		req.reqtype = CTL_REQ_CREATE;
 
 		if (port->p_portal_group) {
+			strlcpy(req.driver, "iscsi", sizeof(req.driver));
 			req.args_nvl = nvlist_create(0);
 			nvlist_add_string(req.args_nvl, "cfiscsi_target",
 			    targ->t_name);
@@ -970,10 +970,13 @@ kernel_port_add(struct port *port)
 				    o->o_value);
 		}
 
-		if (port->p_ioctl_port != -1) {
+		if (port->p_ioctl_port) {
+			strlcpy(req.driver, "ioctl", sizeof(req.driver));
 			req.args_nvl = nvlist_create(0);
 			nvlist_add_number(req.args_nvl, "pp",
-			    port->p_ioctl_port);
+			    port->p_ioctl_pp);
+			nvlist_add_number(req.args_nvl, "vp",
+			    port->p_ioctl_vp);
 		}
 
 		req.args = nvlist_pack(req.args_nvl, &req.args_len);
@@ -1107,16 +1110,16 @@ kernel_port_remove(struct port *port)
 	}
 
 	/* Remove iSCSI or ioctl port. */
-	if (port->p_portal_group || port->p_ioctl_port != -1) {
+	if (port->p_portal_group || port->p_ioctl_port) {
 		bzero(&req, sizeof(req));
-		strlcpy(req.driver, port->p_ioctl_port != -1 ? "ioctl" : "iscsi",
+		strlcpy(req.driver, port->p_ioctl_port ? "ioctl" : "iscsi",
 		    sizeof(req.driver));
 		req.reqtype = CTL_REQ_REMOVE;
 		req.args_nvl = nvlist_create(0);
 		if (req.args_nvl == NULL)
 			log_err(1, "nvlist_create");
 
-		if (port->p_ioctl_port != -1)
+		if (port->p_ioctl_port)
 			nvlist_add_number(req.args_nvl, "port_id",
 			    port->p_ctl_port);
 		else {

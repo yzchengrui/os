@@ -766,6 +766,21 @@ target_port:	PORT STR
 	{
 		struct pport *pp;
 		struct port *tp;
+		int ret, i_pp, i_vp = 0;
+
+		ret = sscanf($2, "ioctl/%d/%d", &i_pp, &i_vp);
+		if (ret > 0) {
+			tp = port_new_ioctl(conf, target, i_pp, i_vp);
+			if (tp == NULL) {
+				log_warnx("can't create new ioctl port for "
+				    "target \"%s\"", target->t_name);
+				free($2);
+				return (1);
+			}
+
+			free($2);
+			return (0);
+		}
 
 		pp = pport_find(conf, $2);
 		if (pp == NULL) {
