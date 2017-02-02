@@ -102,6 +102,7 @@ struct unpcb {
 #define UNP_HAVEPCCACHED		0x002
 #define	UNP_WANTCRED			0x004	/* credentials wanted */
 #define	UNP_CONNWAIT			0x008	/* connect blocks until accepted */
+#define	UNP_WANTXCRED			0x100	/* sockxcred wanted */
 
 /*
  * These flags are used to handle non-atomicity in connect() and bind()

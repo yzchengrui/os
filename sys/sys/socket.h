@@ -492,6 +492,35 @@ struct sockcred {
 #define	SOCKCREDSIZE(ngrps) \
 	(sizeof(struct sockcred) + (sizeof(gid_t) * ((ngrps) - 1)))
 
+/*
+ * Extended credentials.  These are sent during send from
+ * (connected) peer, as requested by the receiver.  They have a
+ * similar form to struct sockcred above, but include the pid
+ * dropped from sockcred, plus a few spares (currently zeroed) for
+ * anything discovered useful later.
+ *
+ * Historical note: "struct sockcred" uses SCM_CREDS and is
+ * selected by the receiver, rather than being sent by the sender.
+ * But sockcred is a one-shot affair on several kinds of sockets,
+ * and has the side effect of *replacing* (wiping out) any
+ * existing cmsgcred.  Because the sender may be gone, the
+ * sender's pid is not available in sockcred; but cmsgcred
+ * requires that the sender explicitly use sendmsg() with a
+ * control message, while sockxcred does not.
+ */
+struct sockxcred {
+	pid_t	sc_pid;			/* PID of sending process */
+	uint32_t sc_zero[3];		/* room for expansion */
+	uid_t	sc_uid;			/* real user id */
+	uid_t	sc_euid;		/* effective user id */
+	gid_t	sc_gid;			/* real group id */
+	gid_t	sc_egid;		/* effective group id */
+	int	sc_ngroups;		/* number of supplemental groups */
+	gid_t	sc_groups[];		/* variable length */
+};
+#define	SOCKXCREDSIZE(ngrps) \
+	(sizeof(struct sockxcred) + (sizeof(gid_t) * (ngrps)))
+
 #endif /* __BSD_VISIBLE */
 
 /* given pointer to struct cmsghdr, return pointer to data */
@@ -533,6 +562,7 @@ struct sockcred {
 #define	SCM_TIMESTAMP	0x02		/* timestamp (struct timeval) */
 #define	SCM_CREDS	0x03		/* process creds (struct cmsgcred) */
 #define	SCM_BINTIME	0x04		/* timestamp (struct bintime) */
+#define	SCM_XCREDS	0x05		/* extended creds (struct sockxcred) */
 #endif
 
 #if __BSD_VISIBLE

@@ -291,6 +291,7 @@ static void	unp_internalize_fp(struct file *);
 static int	unp_externalize(struct mbuf *, struct mbuf **, int);
 static int	unp_externalize_fp(struct file *);
 static int	unp_addsockcred(struct mbuf **, struct thread *);
+static int	unp_addxcred(struct mbuf **, struct thread *);
 static void	unp_process_defers(void * __unused, int);
 
 /*
@@ -957,6 +958,31 @@ uipc_send(struct socket *so, int flags, struct mbuf *m, struct sockaddr *nam,
 			from = (struct sockaddr *)unp->unp_addr;
 		else
 			from = &sun_noname;
+		/*
+		 * If receiver wants extended credentials, add them to
+		 * socket.  The internalizer already ditched any
+		 * attempt to *send* them (since this is controlled
+		 * entirely by receiver).
+		 *
+		 * This can't be done entirely in unp_internalize
+		 * because it is called too early, before we can
+		 * look up unp2 just above.  This means that sockxcred
+		 * does not count against socket buffer size up front.
+		 * If the message becomes too big here we'll return
+		 * ENOBUFS (XXX even on stream sockets).
+		 *
+		 * (Might want to modify the finalize call to take
+		 * a <nam> argument and be able to look up the
+		 * receiver and flags.  But that's also imperfect
+		 * since the receiver could change.)
+		 */
+		if (unp2->unp_flags & UNP_WANTXCRED) {
+			error = unp_addxcred(&control, td);
+			if (error) {
+				UNP_PCB_UNLOCK(unp);
+				break;
+			}
+		}
 		so2 = unp2->unp_socket;
 		SOCKBUF_LOCK(&so2->so_rcv);
 		if (sbappendaddr_locked(&so2->so_rcv, from, m,
@@ -1293,6 +1319,12 @@ uipc_ctloutput(struct socket *so, struct sockopt *sopt)
 			error = sooptcopyout(sopt, &optval, sizeof(optval));
 			break;
 
+		case LOCAL_XCREDS:
+			/* Unlocked read. */
+			optval = unp->unp_flags & UNP_WANTXCRED ? 1 : 0;
+			error = sooptcopyout(sopt, &optval, sizeof(optval));
+			break;
+
 		default:
 			error = EOPNOTSUPP;
 			break;
@@ -1303,6 +1335,7 @@ uipc_ctloutput(struct socket *so, struct sockopt *sopt)
 		switch (sopt->sopt_name) {
 		case LOCAL_CREDS:
 		case LOCAL_CONNWAIT:
+		case LOCAL_XCREDS:
 			error = sooptcopyin(sopt, &optval, sizeof(optval),
 					    sizeof(optval));
 			if (error)
@@ -1324,6 +1357,10 @@ uipc_ctloutput(struct socket *so, struct sockopt *sopt)
 
 			case LOCAL_CONNWAIT:
 				OPTSET(UNP_CONNWAIT);
+				break;
+
+			case LOCAL_XCREDS:
+				OPTSET(UNP_WANTXCRED);
 				break;
 
 			default:
@@ -1476,6 +1513,8 @@ unp_connectat(int fd, struct socket *so, struct sockaddr *nam,
 		unp->unp_flags |= UNP_HAVEPC;
 		if (unp2->unp_flags & UNP_WANTCRED)
 			unp3->unp_flags |= UNP_WANTCRED;
+		if (unp2->unp_flags & UNP_WANTXCRED)
+			unp3->unp_flags |= UNP_WANTXCRED;
 		UNP_PCB_UNLOCK(unp3);
 		UNP_PCB_UNLOCK(unp2);
 		UNP_PCB_UNLOCK(unp);
@@ -1960,6 +1999,7 @@ static struct unp_scm_internalize_op unp_internalize_ops[] = {
 	[SCM_RIGHTS] = { 0, unp_internalize_fds },
 	[SCM_TIMESTAMP] = { sizeof(struct timeval), unp_internalize_timestamp },
 	[SCM_BINTIME] = { sizeof(struct bintime), unp_internalize_bintime },
+	/* no SCM_XCREDS; attempting to send them gives EINVAL */
 };
 
 /*
@@ -2187,6 +2227,7 @@ unp_addsockcred(struct mbuf **pcontrol, struct thread *td)
 	int ngroups;
 	int i;
 
+	/* XXX why limit to CMGROUP_MAX here? */
 	ngroups = MIN(td->td_ucred->cr_ngroups, CMGROUP_MAX);
 	m = sbcreatecontrol(NULL, SOCKCREDSIZE(ngroups), SCM_CREDS, SOL_SOCKET);
 	if (m == NULL)
@@ -2224,6 +2265,41 @@ unp_addsockcred(struct mbuf **pcontrol, struct thread *td)
 
 	/* Prepend it to the head. */
 	m->m_next = control;
+	*pcontrol = m;
+	return (0);
+}
+
+/*
+ * Like unp_addsockcred, but called from sender thread, not receiver,
+ * and uses struct sockxcred.
+ */
+static int
+unp_addxcred(struct mbuf **pcontrol, struct thread *td)
+{
+	struct mbuf *m;
+	struct sockxcred *sc;
+	int ngroups;
+	int i;
+
+	ngroups = td->td_ucred->cr_ngroups;
+	m = sbcreatecontrol(NULL, SOCKXCREDSIZE(ngroups), SCM_XCREDS,
+	    SOL_SOCKET);
+	if (m == NULL)
+		return (ENOBUFS);
+
+	sc = (struct sockxcred *) CMSG_DATA(mtod(m, struct cmsghdr *));
+	sc->sc_pid = td->td_proc->p_pid;
+	bzero(&sc->sc_zero, sizeof(sc->sc_zero));
+	sc->sc_uid = td->td_ucred->cr_ruid;
+	sc->sc_euid = td->td_ucred->cr_uid;
+	sc->sc_gid = td->td_ucred->cr_rgid;
+	sc->sc_egid = td->td_ucred->cr_gid;
+	sc->sc_ngroups = ngroups;
+	for (i = 0; i < sc->sc_ngroups; i++)
+		sc->sc_groups[i] = td->td_ucred->cr_groups[i];
+
+	/* Prepend sockxcred. */
+	m->m_next = *pcontrol;
 	*pcontrol = m;
 	return (0);
 }
@@ -2620,6 +2696,10 @@ db_print_unpflags(int unp_flags)
 	}
 	if (unp_flags & UNP_WANTCRED) {
 		db_printf("%sUNP_WANTCRED", comma ? ", " : "");
+		comma = 1;
+	}
+	if (unp_flags & UNP_WANTXCRED) {
+		db_printf("%sUNP_WANTXCRED", comma ? ", " : "");
 		comma = 1;
 	}
 	if (unp_flags & UNP_CONNWAIT) {
