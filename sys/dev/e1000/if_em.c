@@ -104,6 +104,7 @@ static pci_vendor_info_t em_vendor_info_array[] =
 	PVID(0x8086, E1000_DEV_ID_82571EB_QUAD_COPPER_LP, "Intel(R) PRO/1000 Network Connection"),
 	PVID(0x8086, E1000_DEV_ID_82571EB_QUAD_FIBER, "Intel(R) PRO/1000 Network Connection"), 
 	PVID(0x8086, E1000_DEV_ID_82571PT_QUAD_COPPER, "Intel(R) PRO/1000 Network Connection"),
+	PVID(0x8086, E1000_DEV_ID_82572EI,		"Intel(R) PRO/1000 Network Connection"),
 	PVID(0x8086, E1000_DEV_ID_82572EI_COPPER,	"Intel(R) PRO/1000 Network Connection"),
 	PVID(0x8086, E1000_DEV_ID_82572EI_FIBER,	"Intel(R) PRO/1000 Network Connection"), 
 	PVID(0x8086, E1000_DEV_ID_82572EI_SERDES,	"Intel(R) PRO/1000 Network Connection"), 
@@ -2481,10 +2482,10 @@ em_setup_interface(if_ctx_t ctx)
 	INIT_DEBUGOUT("em_setup_interface: begin");
 
 	/* TSO parameters */
-	ifp->if_hw_tsomax = IP_MAXPACKET;
+	if_sethwtsomax(ifp, IP_MAXPACKET);
 	/* Take m_pullup(9)'s in em_xmit() w/ TSO into acount. */
-	ifp->if_hw_tsomaxsegcount = EM_MAX_SCATTER - 5;
-	ifp->if_hw_tsomaxsegsize = EM_TSO_SEG_SIZE;
+	if_sethwtsomaxsegcount(ifp, EM_MAX_SCATTER - 5);
+	if_sethwtsomaxsegsize(ifp, EM_TSO_SEG_SIZE);
 
 	/* Single Queue */
         if (adapter->tx_num_queues == 1) {
