@@ -2430,9 +2430,11 @@ vn_mmap(struct file *fp, vm_map_t map, vm_offset_t *addr, vm_size_t size,
 	 * proc does a setuid?
 	 */
 	mp = vp->v_mount;
-	if (mp != NULL && (mp->mnt_flag & MNT_NOEXEC) != 0)
+	if (mp != NULL && (mp->mnt_flag & MNT_NOEXEC) != 0) {
 		maxprot = VM_PROT_NONE;
-	else
+		if ((prot & VM_PROT_EXECUTE) != 0)
+			return (EACCES);
+	} else
 		maxprot = VM_PROT_EXECUTE;
 	if ((fp->f_flag & FREAD) != 0)
 		maxprot |= VM_PROT_READ;
@@ -2454,6 +2456,24 @@ vn_mmap(struct file *fp, vm_map_t map, vm_offset_t *addr, vm_size_t size,
 		cap_maxprot |= VM_PROT_WRITE;
 	}
 	maxprot &= cap_maxprot;
+
+	/*
+	 * For regular files and shared memory, POSIX requires that
+	 * the value of foff be a legitimate offset within the data
+	 * object.  In particular, negative offsets are invalid.
+	 * Blocking negative offsets and overflows here avoids
+	 * possible wraparound or user-level access into reserved
+	 * ranges of the data object later.  In contrast, POSIX does
+	 * not dictate how offsets are used by device drivers, so in
+	 * the case of a device mapping a negative offset is passed
+	 * on.
+	 */
+	if (
+#ifdef _LP64
+	    size > OFF_MAX ||
+#endif
+	    foff < 0 || foff > OFF_MAX - size)
+		return (EINVAL);
 
 	writecounted = FALSE;
 	error = vm_mmap_vnode(td, size, prot, &maxprot, &flags, vp,

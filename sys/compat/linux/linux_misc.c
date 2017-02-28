@@ -623,7 +623,7 @@ linux_mremap(struct thread *td, struct linux_mremap_args *args)
 	if (args->new_len < args->old_len) {
 		addr = args->addr + args->new_len;
 		len = args->old_len - args->new_len;
-		error = kern_vm_munmap(td, addr, len);
+		error = kern_munmap(td, addr, len);
 	}
 
 	td->td_retval[0] = error ? 0 : (uintptr_t)args->addr;
@@ -638,7 +638,7 @@ int
 linux_msync(struct thread *td, struct linux_msync_args *args)
 {
 
-	return (kern_vm_msync(td, args->addr, args->len,
+	return (kern_msync(td, args->addr, args->len,
 	    args->fl & ~LINUX_MS_SYNC));
 }
 
@@ -2290,8 +2290,9 @@ linux_pselect6(struct thread *td, struct linux_pselect6_args *args)
 
 		TIMEVAL_TO_TIMESPEC(&utv, &uts);
 
-		native_to_linux_timespec(&lts, &uts);
-		error = copyout(&lts, args->tsp, sizeof(lts));
+		error = native_to_linux_timespec(&lts, &uts);
+		if (error == 0)
+			error = copyout(&lts, args->tsp, sizeof(lts));
 	}
 
 	return (error);
@@ -2343,8 +2344,9 @@ linux_ppoll(struct thread *td, struct linux_ppoll_args *args)
 		} else
 			timespecclear(&uts);
 
-		native_to_linux_timespec(&lts, &uts);
-		error = copyout(&lts, args->tsp, sizeof(lts));
+		error = native_to_linux_timespec(&lts, &uts);
+		if (error == 0)
+			error = copyout(&lts, args->tsp, sizeof(lts));
 	}
 
 	return (error);
@@ -2438,7 +2440,9 @@ linux_sched_rr_get_interval(struct thread *td,
 	PROC_UNLOCK(tdt->td_proc);
 	if (error != 0)
 		return (error);
-	native_to_linux_timespec(&lts, &ts);
+	error = native_to_linux_timespec(&lts, &ts);
+	if (error != 0)
+		return (error);
 	return (copyout(&lts, uap->interval, sizeof(lts)));
 }
 
