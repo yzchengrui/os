@@ -48,7 +48,6 @@ __FBSDID("$FreeBSD$");
 
 /*
  * return a pointer into a directory
- */
 long
 telldir(DIR *dirp)
 {
@@ -79,7 +78,29 @@ telldir(DIR *dirp)
 		_pthread_mutex_unlock(&dirp->dd_lock);
 	return (idx);
 }
+ */
+/*
+is maybe 
+https://svnweb.freebsd.org/base/stable/11/lib/libc/gen/telldir.c?r1=235647&r2=269204
+*/
+long
+telldir(dirp)
+	DIR *dirp;
+{
+	struct ddloc *lp;
 
+	if ((lp = (struct ddloc *)malloc(sizeof(struct ddloc))) == NULL)
+		return (-1);
+	if (__isthreaded)
+		_pthread_mutex_lock(&dirp->dd_lock);
+	lp->loc_index = dirp->dd_td->td_loccnt++;
+	lp->loc_seek = dirp->dd_seek;
+	lp->loc_loc = dirp->dd_loc;
+	LIST_INSERT_HEAD(&dirp->dd_td->td_locq, lp, loc_lqe);
+	if (__isthreaded)
+		_pthread_mutex_unlock(&dirp->dd_lock);
+	return (lp->loc_index);
+}
 /*
  * seek to an entry in a directory.
  * Only values returned by "telldir" should be passed to seekdir.
