@@ -121,6 +121,7 @@ SUBDIR=	${SUBDIR_BOOTSTRAP} \
 	liby \
 	${_libypclnt} \
 	libz \
+	libzstd \
 	ncurses \
 	${_atf} \
 	${_clang} \
