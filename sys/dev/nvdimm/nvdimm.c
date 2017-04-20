@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 #include <sys/sysctl.h>
 #include <sys/uio.h>
+#include <sys/vmmeter.h>
 
 #include <vm/vm.h>      /* vtophys */
 #include <vm/pmap.h>    /* vtophys */
