@@ -62,6 +62,7 @@ __DEFAULT_YES_OPTIONS = \
     BOOTPARAMD \
     BOOTPD \
     BSD_CPIO \
+    BSD_GREP_FASTMATCH \
     BSDINSTALL \
     BSNMP \
     BZIP2 \
@@ -96,9 +97,9 @@ __DEFAULT_YES_OPTIONS = \
     FTP \
     GAMES \
     GCOV \
+    GDB \
     GNU_DIFF \
     GNU_GREP \
-    GNU_GREP_COMPAT \
     GPIO \
     GPL_DTC \
     GROFF \
@@ -180,6 +181,7 @@ __DEFAULT_NO_OPTIONS = \
     BSD_GREP \
     CLANG_EXTRAS \
     DTRACE_TESTS \
+    GNU_GREP_COMPAT \
     HESIOD \
     LIBSOFT \
     NAND \
@@ -266,9 +268,9 @@ BROKEN_OPTIONS+=LLDB
 # does not yet contain kernel support for arm, and sparc64 kernel support
 # has not been tested.
 .if ${__T:Marm*} != "" || ${__T} == "sparc64"
-__DEFAULT_YES_OPTIONS+=GDB
+__DEFAULT_NO_OPTIONS+=GDB_LIBEXEC
 .else
-__DEFAULT_NO_OPTIONS+=GDB
+__DEFAULT_YES_OPTIONS+=GDB_LIBEXEC
 .endif
 # Only doing soft float API stuff on armv6
 .if ${__T} != "armv6"
@@ -335,16 +337,6 @@ MK_LIBTHR:=	no
 .if ${MK_LDNS} == "no"
 MK_LDNS_UTILS:=	no
 MK_UNBOUND:= no
-.endif
-
-.if ${MK_LLD} == "no"
-MK_LLD_IS_LD:=	no
-.endif
-
-# LLD requires LLVM libraries, and we do not yet compare in-tree and host LLD
-# versions to avoid building it if they are identical.
-.if ${MK_LLD_IS_LD} != "no"
-MK_SYSTEM_COMPILER:=	no
 .endif
 
 .if ${MK_SOURCELESS} == "no"
