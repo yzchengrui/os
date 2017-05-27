@@ -291,6 +291,14 @@ static struct syscall decoded_syscalls[] = {
 	  .args = { { Rforkflags, 0 } } },
 	{ .name = "rmdir", .ret_type = 1, .nargs = 1,
 	  .args = { { Name, 0 } } },
+	{ .name = "sctp_generic_recvmsg", .ret_type = 1, .nargs = 7,
+	  .args = { { Int, 0 }, { Ptr | IN, 1 }, { Int, 2 },
+	            { Sockaddr | OUT, 3 }, { Ptr | OUT, 4 }, { Ptr | OUT, 5 },
+	            { Ptr | OUT, 6 } } },
+	{ .name = "sctp_generic_sendmsg", .ret_type = 1, .nargs = 7,
+	  .args = { { Int, 0 }, { BinString | IN, 1 }, { Int, 2 },
+	            { Sockaddr | IN, 3 }, { Socklent, 4 }, { Ptr | IN, 5 },
+	            { Msgflags, 6 } } },
 	{ .name = "select", .ret_type = 1, .nargs = 5,
 	  .args = { { Int, 0 }, { Fd_set, 1 }, { Fd_set, 2 }, { Fd_set, 3 },
 		    { Timeval, 4 } } },
@@ -1930,13 +1938,20 @@ print_arg(struct syscall_args *sc, unsigned long *args, long *retval,
 		fprintf(fp, "%u", (socklen_t)args[sc->offset]);
 		break;
 	case Sockprotocol: {
-		int protocol;
+		const char *temp;
+		int domain, protocol;
 
+		domain = args[sc->offset - 2];
 		protocol = args[sc->offset];
 		if (protocol == 0) {
 			fputs("0", fp);
 		} else {
-			print_integer_arg(sysdecode_ipproto, fp, protocol);
+			temp = sysdecode_socket_protocol(domain, protocol);
+			if (temp) {
+				fputs(temp, fp);
+			} else {
+				fprintf(fp, "%d", protocol);
+			}
 		}
 		break;
 	}
