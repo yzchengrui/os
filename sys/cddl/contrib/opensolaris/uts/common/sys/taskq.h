@@ -28,7 +28,9 @@
 
 #include <sys/types.h>
 #include <sys/proc.h>
+#ifdef _KERNEL
 #include <sys/taskqueue.h>
+#endif
 
 #ifdef	__cplusplus
 extern "C" {
@@ -72,6 +74,8 @@ struct proc;
 #define	TQ_NOALLOC	0x04	/* cannot allocate memory; may fail */
 #define	TQ_FRONT	0x08	/* Put task at the front of the queue */
 
+#define	TASKQID_INVALID	((taskqid_t)0)
+
 #ifdef _KERNEL
 
 extern taskq_t *system_taskq;
@@ -86,6 +90,7 @@ taskq_t	*taskq_create_proc(const char *, int, pri_t, int, int,
 taskq_t	*taskq_create_sysdc(const char *, int, int, int,
     struct proc *, uint_t, uint_t);
 taskqid_t taskq_dispatch(taskq_t *, task_func_t, void *, uint_t);
+void	taskq_cancel_id(taskq_t *, taskqid_t);
 void	taskq_dispatch_ent(taskq_t *, task_func_t, void *, uint_t,
     taskq_ent_t *);
 void	nulltask(void *);

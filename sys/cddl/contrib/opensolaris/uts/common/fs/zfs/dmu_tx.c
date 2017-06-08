@@ -1658,7 +1658,7 @@ dmu_tx_hold_sa_create(dmu_tx_t *tx, int attrsize)
 
 	dmu_tx_sa_registration_hold(sa, tx);
 
-	if (attrsize <= DN_MAX_BONUSLEN && !sa->sa_force_spill)
+	if (attrsize <= DN_OLD_MAX_BONUSLEN && !sa->sa_force_spill)
 		return;
 
 	(void) dmu_tx_hold_object_impl(tx, tx->tx_objset, DMU_NEW_OBJECT,

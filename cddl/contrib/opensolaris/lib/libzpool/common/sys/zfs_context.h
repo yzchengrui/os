@@ -213,11 +213,20 @@ extern int aok;
 /*
  * Threads
  */
+typedef void (*thread_func_t)(void *);
+typedef void (*thread_func_arg_t)(void *);
+typedef pthread_t kt_did_t;
+
 #define	curthread	((void *)(uintptr_t)thr_self())
 
 #define	kpreempt(x)	sched_yield()
 
-typedef struct kthread kthread_t;
+typedef struct kthread {
+        kt_did_t        t_tid;
+        thread_func_t   t_func;
+        void *          t_arg;
+        pri_t           t_pri;
+} kthread_t;
 
 #define	thread_create(stk, stksize, func, arg, len, pp, state, pri)	\
 	zk_thread_create(func, arg)
@@ -226,11 +235,13 @@ typedef struct kthread kthread_t;
 
 #define	newproc(f, a, cid, pri, ctp, pid)	(ENOSYS)
 
+#ifndef _KERNEL
 /* in libzpool, p0 exists only to have its address taken */
 struct proc {
 	uintptr_t	this_is_never_used_dont_dereference_it;
 };
-
+#endif
+	
 extern struct proc p0;
 #define	curproc		(&p0)
 
@@ -405,6 +416,7 @@ typedef struct taskq_ent {
 #define	TQ_NOQUEUE	0x02		/* Do not enqueue if can't dispatch */
 #define	TQ_FRONT	0x08		/* Queue in front */
 
+#define	TASKQID_INVALID	((taskqid_t)0)
 
 extern taskq_t *system_taskq;
 
@@ -414,6 +426,7 @@ extern taskq_t	*taskq_create(const char *, int, pri_t, int, int, uint_t);
 #define	taskq_create_sysdc(a, b, d, e, p, dc, f) \
 	    (taskq_create(a, b, maxclsyspri, d, e, f))
 extern taskqid_t taskq_dispatch(taskq_t *, task_func_t, void *, uint_t);
+void	taskq_cancel_id(taskq_t *, taskqid_t);
 extern void	taskq_dispatch_ent(taskq_t *, task_func_t, void *, uint_t,
     taskq_ent_t *);
 extern void	taskq_destroy(taskq_t *);

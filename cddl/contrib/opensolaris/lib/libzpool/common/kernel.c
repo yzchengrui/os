@@ -70,6 +70,86 @@ struct proc p0;
  * threads
  * =========================================================================
  */
+
+pthread_cond_t kthread_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t kthread_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_key_t kthread_key;
+int kthread_nr = 0;
+
+void
+thread_init(void)
+{
+	kthread_t *kt;
+
+	VERIFY3S(pthread_key_create(&kthread_key, NULL), ==, 0);
+
+	/* Create entry for primary kthread */
+	kt = umem_zalloc(sizeof (kthread_t), UMEM_NOFAIL);
+	kt->t_tid = pthread_self();
+	kt->t_func = NULL;
+
+	VERIFY3S(pthread_setspecific(kthread_key, kt), ==, 0);
+
+	/* Only the main thread should be running at the moment */
+	ASSERT3S(kthread_nr, ==, 0);
+	kthread_nr = 1;
+}
+
+void
+thread_fini(void)
+{
+	kthread_t *kt = curthread;
+
+	ASSERT(pthread_equal(kt->t_tid, pthread_self()));
+	ASSERT3P(kt->t_func, ==, NULL);
+
+	umem_free(kt, sizeof (kthread_t));
+
+	/* Wait for all threads to exit via thread_exit() */
+	VERIFY3S(pthread_mutex_lock(&kthread_lock), ==, 0);
+
+	kthread_nr--; /* Main thread is exiting */
+
+	while (kthread_nr > 0)
+		VERIFY0(pthread_cond_wait(&kthread_cond, &kthread_lock));
+
+	ASSERT3S(kthread_nr, ==, 0);
+	VERIFY3S(pthread_mutex_unlock(&kthread_lock), ==, 0);
+
+	VERIFY3S(pthread_key_delete(kthread_key), ==, 0);
+}
+
+kthread_t *
+zk_thread_current(void)
+{
+	kthread_t *kt = pthread_getspecific(kthread_key);
+
+	ASSERT3P(kt, !=, NULL);
+
+	return (kt);
+}
+
+void *
+zk_thread_helper(void *arg)
+{
+	kthread_t *kt = (kthread_t *)arg;
+
+	VERIFY3S(pthread_setspecific(kthread_key, kt), ==, 0);
+
+	VERIFY3S(pthread_mutex_lock(&kthread_lock), ==, 0);
+	kthread_nr++;
+	VERIFY3S(pthread_mutex_unlock(&kthread_lock), ==, 0);
+	(void) setpriority(PRIO_PROCESS, 0, kt->t_pri);
+
+	kt->t_tid = pthread_self();
+	((thread_func_arg_t)kt->t_func)(kt->t_arg);
+
+	/* Unreachable, thread must exit with thread_exit() */
+	abort();
+
+	return (NULL);
+}
+
 /*ARGSUSED*/
 kthread_t *
 zk_thread_create(void (*func)(), void *arg)

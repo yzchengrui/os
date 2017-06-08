@@ -15,6 +15,12 @@
 #define	MS_OVERLAY	0x0
 #define	MS_NOMNTTAB	0x0
 #define	MS_RDONLY	0x1
+/*
+ * MS_CRYPT indicates that encryption keys should be loaded if they are not
+ * already available. This is not defined in glibc, but it is never seen by
+ * the kernel so it will not cause any problems.
+ */
+#define MS_CRYPT	0x8
 
 #define	umount2(p, f)	unmount(p, f)
 

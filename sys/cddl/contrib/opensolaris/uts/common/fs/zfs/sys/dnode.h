@@ -67,9 +67,7 @@ extern "C" {
 /*
  * dnode id flags
  *
- * Note: a file will never ever have its
- * ids moved from bonus->spill
- * and only in a crypto environment would it be on spill
+ * Note: a file will never ever have its ids moved from bonus->spill
  */
 #define	DN_ID_CHKED_BONUS	0x1
 #define	DN_ID_CHKED_SPILL	0x2
@@ -79,11 +77,19 @@ extern "C" {
 /*
  * Derived constants.
  */
-#define	DNODE_SIZE	(1 << DNODE_SHIFT)
-#define	DN_MAX_NBLKPTR	((DNODE_SIZE - DNODE_CORE_SIZE) >> SPA_BLKPTRSHIFT)
-#define	DN_MAX_BONUSLEN	(DNODE_SIZE - DNODE_CORE_SIZE - (1 << SPA_BLKPTRSHIFT))
+
+#define DNODE_MIN_SIZE		(1 << DNODE_SHIFT)
+#define DNODE_MAX_SIZE		(1 << DNODE_BLOCK_SHIFT)
+#define DNODE_BLOCK_SIZE	(1 << DNODE_BLOCK_SHIFT)
+#define DNODE_MIN_SLOTS		(DNODE_MIN_SIZE >> DNODE_SHIFT)
+#define DNODE_MAX_SLOTS		(DNODE_MAX_SIZE >> DNODE_SHIFT)
+#define DN_BONUS_SIZE(dnsize)	((dnsize) - DNODE_CORE_SIZE - \
+				 (1 << SPA_BLKPTRSHIFT))
+#define DN_SLOTS_TO_BONUSLEN(slots)	DN_BONUS_SIZE((slots) << DNODE_SHIFT)
+#define DN_OLD_MAX_BONUSLEN	(DN_BONUS_SIZE(DNODE_MIN_SIZE))
+#define	DN_MAX_NBLKPTR	((DNODE_MIN_SIZE - DNODE_CORE_SIZE) >> SPA_BLKPTRSHIFT)
 #define	DN_MAX_OBJECT	(1ULL << DN_MAX_OBJECT_SHIFT)
-#define	DN_ZERO_BONUSLEN	(DN_MAX_BONUSLEN + 1)
+#define	DN_ZERO_BONUSLEN	(DN_BONUS_SIZE(DNODE_MAX_SIZE) + 1)
 #define	DN_KILL_SPILLBLK (1)
 
 #define	DNODES_PER_BLOCK_SHIFT	(DNODE_BLOCK_SHIFT - DNODE_SHIFT)
@@ -102,6 +108,10 @@ extern "C" {
 
 #define	DN_BONUS(dnp)	((void*)((dnp)->dn_bonus + \
 	(((dnp)->dn_nblkptr - 1) * sizeof (blkptr_t))))
+#define	DN_MAX_BONUS_LEN(dnp) \
+	((dnp->dn_flags & DNODE_FLAG_SPILL_BLKPTR) ? \
+	(uint8_t *)DN_SPILL_BLKPTR(dnp) - (uint8_t *)DN_BONUS(dnp) : \
+	(uint8_t *)(dnp + (dnp->dn_extra_slots + 1)) - (uint8_t *)DN_BONUS(dnp))
 
 #define	DN_USED_BYTES(dnp) (((dnp)->dn_flags & DNODE_FLAG_USED_BYTES) ? \
 	(dnp)->dn_used : (dnp)->dn_used << SPA_MINBLOCKSHIFT)
@@ -125,6 +135,9 @@ enum dnode_dirtycontext {
 /* Does dnode have a SA spill blkptr in bonus? */
 #define	DNODE_FLAG_SPILL_BLKPTR	(1<<2)
 
+#define	DNODE_CRYPT_PORTABLE_FLAGS_MASK		\
+	(DNODE_FLAG_USED_BYTES | DNODE_FLAG_SPILL_BLKPTR)
+
 typedef struct dnode_phys {
 	uint8_t dn_type;		/* dmu_object_type_t */
 	uint8_t dn_indblkshift;		/* ln2(indirect block size) */
@@ -136,7 +149,8 @@ typedef struct dnode_phys {
 	uint8_t dn_flags;		/* DNODE_FLAG_* */
 	uint16_t dn_datablkszsec;	/* data block size in 512b sectors */
 	uint16_t dn_bonuslen;		/* length of dn_bonus */
-	uint8_t dn_pad2[4];
+	uint8_t	dn_extra_slots;		/* # of subsequent slots consumed */
+	uint8_t dn_pad2[3];
 
 	/* accounting is protected by dn_dirty_mtx */
 	uint64_t dn_maxblkid;		/* largest allocated block ID */
@@ -144,10 +158,39 @@ typedef struct dnode_phys {
 
 	uint64_t dn_pad3[4];
 
-	blkptr_t dn_blkptr[1];
-	uint8_t dn_bonus[DN_MAX_BONUSLEN - sizeof (blkptr_t)];
-	blkptr_t dn_spill;
+	/*
+	 * The tail region is 448 bytes for a 512 byte dnode, and
+	 * correspondingly larger for larger dnode sizes. The spill
+	 * block pointer, when present, is always at the end of the tail
+	 * region. There are three ways this space may be used, using
+	 * a 512 byte dnode for this diagram:
+	 *
+	 * 0       64      128     192     256     320     384     448 (offset)
+	 * +---------------+---------------+---------------+-------+
+	 * | dn_blkptr[0]  | dn_blkptr[1]  | dn_blkptr[2]  | /     |
+	 * +---------------+---------------+---------------+-------+
+	 * | dn_blkptr[0]  | dn_bonus[0..319]                      |
+	 * +---------------+-----------------------+---------------+
+	 * | dn_blkptr[0]  | dn_bonus[0..191]      | dn_spill      |
+	 * +---------------+-----------------------+---------------+
+	 */
+	union {
+		blkptr_t dn_blkptr[1+DN_OLD_MAX_BONUSLEN/sizeof (blkptr_t)];
+		struct {
+			blkptr_t __dn_ignore1;
+			uint8_t dn_bonus[DN_OLD_MAX_BONUSLEN];
+		};
+		struct {
+			blkptr_t __dn_ignore2;
+			uint8_t __dn_ignore3[DN_OLD_MAX_BONUSLEN -
+			    sizeof (blkptr_t)];
+			blkptr_t dn_spill;
+		};
+	};
 } dnode_phys_t;
+
+#define DN_SPILL_BLKPTR(dnp)    (blkptr_t *)((char *)(dnp) + \
+        (((dnp)->dn_extra_slots + 1) << DNODE_SHIFT) - (1 << SPA_BLKPTRSHIFT))
 
 struct dnode {
 	/*
@@ -185,6 +228,7 @@ struct dnode {
 	uint32_t dn_datablksz;		/* in bytes */
 	uint64_t dn_maxblkid;
 	uint8_t dn_next_type[TXG_SIZE];
+	uint8_t dn_num_slots;		/* metadnode slots consumed on disk */
 	uint8_t dn_next_nblkptr[TXG_SIZE];
 	uint8_t dn_next_nlevels[TXG_SIZE];
 	uint8_t dn_next_indblkshift[TXG_SIZE];
@@ -282,7 +326,7 @@ void dnode_rm_spill(dnode_t *dn, dmu_tx_t *tx);
 
 int dnode_hold(struct objset *dd, uint64_t object,
     void *ref, dnode_t **dnp);
-int dnode_hold_impl(struct objset *dd, uint64_t object, int flag,
+int dnode_hold_impl(struct objset *dd, uint64_t object, int flag, int slots,
     void *ref, dnode_t **dnp);
 boolean_t dnode_add_ref(dnode_t *dn, void *ref);
 void dnode_rele(dnode_t *dn, void *ref);
@@ -290,13 +334,14 @@ void dnode_rele_and_unlock(dnode_t *dn, void *tag);
 void dnode_setdirty(dnode_t *dn, dmu_tx_t *tx);
 void dnode_sync(dnode_t *dn, dmu_tx_t *tx);
 void dnode_allocate(dnode_t *dn, dmu_object_type_t ot, int blocksize, int ibs,
-    dmu_object_type_t bonustype, int bonuslen, dmu_tx_t *tx);
+		    dmu_object_type_t bonustype, int bonuslen, int dn_slots, dmu_tx_t *tx);
 void dnode_reallocate(dnode_t *dn, dmu_object_type_t ot, int blocksize,
-    dmu_object_type_t bonustype, int bonuslen, dmu_tx_t *tx);
+		      dmu_object_type_t bonustype, int bonuslen, int dn_slots, dmu_tx_t *tx);
 void dnode_free(dnode_t *dn, dmu_tx_t *tx);
 void dnode_byteswap(dnode_phys_t *dnp);
 void dnode_buf_byteswap(void *buf, size_t size);
 void dnode_verify(dnode_t *dn);
+int dnode_set_nlevels(dnode_t *dn, int nlevels, dmu_tx_t *tx);
 int dnode_set_blksz(dnode_t *dn, uint64_t size, int ibs, dmu_tx_t *tx);
 void dnode_free_range(dnode_t *dn, uint64_t off, uint64_t len, dmu_tx_t *tx);
 void dnode_diduse_space(dnode_t *dn, int64_t space);

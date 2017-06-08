@@ -90,6 +90,49 @@ enum zio_checksum {
 	ZIO_CHECKSUM_FUNCTIONS
 };
 
+enum zio_compress {
+        ZIO_COMPRESS_INHERIT = 0,
+        ZIO_COMPRESS_ON,
+        ZIO_COMPRESS_OFF,
+        ZIO_COMPRESS_LZJB,
+        ZIO_COMPRESS_EMPTY,
+        ZIO_COMPRESS_GZIP_1,
+        ZIO_COMPRESS_GZIP_2,
+        ZIO_COMPRESS_GZIP_3,
+        ZIO_COMPRESS_GZIP_4,
+        ZIO_COMPRESS_GZIP_5,
+        ZIO_COMPRESS_GZIP_6,
+        ZIO_COMPRESS_GZIP_7,
+        ZIO_COMPRESS_GZIP_8,
+        ZIO_COMPRESS_GZIP_9,
+        ZIO_COMPRESS_ZLE,
+        ZIO_COMPRESS_LZ4,
+        ZIO_COMPRESS_FUNCTIONS
+};
+
+/* supported encryption algorithms */
+enum zio_encrypt {
+	ZIO_CRYPT_INHERIT = 0,
+	ZIO_CRYPT_ON,
+	ZIO_CRYPT_OFF,
+	ZIO_CRYPT_AES_128_CCM,
+	ZIO_CRYPT_AES_192_CCM,
+	ZIO_CRYPT_AES_256_CCM,
+	ZIO_CRYPT_AES_128_GCM,
+	ZIO_CRYPT_AES_192_GCM,
+	ZIO_CRYPT_AES_256_GCM,
+	ZIO_CRYPT_FUNCTIONS
+};
+
+#define	ZIO_CRYPT_ON_VALUE	ZIO_CRYPT_AES_256_CCM
+#define	ZIO_CRYPT_DEFAULT	ZIO_CRYPT_OFF
+
+/* macros defining encryption lengths */
+#define	ZIO_OBJSET_MAC_LEN		32
+#define	ZIO_DATA_IV_LEN			12
+#define	ZIO_DATA_SALT_LEN		8
+#define	ZIO_DATA_MAC_LEN		16
+
 /*
  * The number of "legacy" compression functions which can be set on individual
  * objects.
@@ -105,6 +148,7 @@ enum zio_checksum {
 #define	ZIO_DEDUPCHECKSUM	ZIO_CHECKSUM_SHA256
 #define	ZIO_DEDUPDITTO_MIN	100
 
+#if 0
 enum zio_compress {
 	ZIO_COMPRESS_INHERIT = 0,
 	ZIO_COMPRESS_ON,
@@ -124,6 +168,7 @@ enum zio_compress {
 	ZIO_COMPRESS_LZ4,
 	ZIO_COMPRESS_FUNCTIONS
 };
+#endif
 
 /*
  * The number of "legacy" compression functions which can be set on individual
@@ -197,16 +242,19 @@ enum zio_flag {
 	ZIO_FLAG_DONT_PROPAGATE	= 1 << 20,
 	ZIO_FLAG_IO_BYPASS	= 1 << 21,
 	ZIO_FLAG_IO_REWRITE	= 1 << 22,
-	ZIO_FLAG_RAW		= 1 << 23,
-	ZIO_FLAG_GANG_CHILD	= 1 << 24,
-	ZIO_FLAG_DDT_CHILD	= 1 << 25,
-	ZIO_FLAG_GODFATHER	= 1 << 26,
-	ZIO_FLAG_NOPWRITE	= 1 << 27,
-	ZIO_FLAG_REEXECUTED	= 1 << 28,
-	ZIO_FLAG_DELEGATED	= 1 << 29,
+	ZIO_FLAG_RAW_COMPRESS	= 1 << 23,
+	ZIO_FLAG_RAW_ENCRYPT	= 1 << 24,
+	ZIO_FLAG_GANG_CHILD	= 1 << 25,
+	ZIO_FLAG_DDT_CHILD	= 1 << 26,
+	ZIO_FLAG_GODFATHER	= 1 << 27,
+	ZIO_FLAG_NOPWRITE	= 1 << 28,
+	ZIO_FLAG_REEXECUTED	= 1 << 29,
+	ZIO_FLAG_DELEGATED	= 1 << 30,
+	ZIO_FLAG_FASTWRITE	= 1 << 31,
 };
 
 #define	ZIO_FLAG_MUSTSUCCEED		0
+#define	ZIO_FLAG_RAW	(ZIO_FLAG_RAW_COMPRESS | ZIO_FLAG_RAW_ENCRYPT)
 
 #define	ZIO_DDT_CHILD_FLAGS(zio)				\
 	(((zio)->io_flags & ZIO_FLAG_DDT_INHERIT) |		\
@@ -300,15 +348,21 @@ typedef struct zbookmark_phys {
 	(zb)->zb_level == ZB_ROOT_LEVEL &&	\
 	(zb)->zb_blkid == ZB_ROOT_BLKID)
 
+enum dmu_object_type;
 typedef struct zio_prop {
 	enum zio_checksum	zp_checksum;
 	enum zio_compress	zp_compress;
-	dmu_object_type_t	zp_type;
+	enum dmu_object_type	zp_type;
 	uint8_t			zp_level;
 	uint8_t			zp_copies;
 	boolean_t		zp_dedup;
 	boolean_t		zp_dedup_verify;
 	boolean_t		zp_nopwrite;
+	boolean_t		zp_encrypt;
+	boolean_t		zp_byteorder;
+	uint8_t			zp_salt[ZIO_DATA_SALT_LEN];
+	uint8_t			zp_iv[ZIO_DATA_IV_LEN];
+	uint8_t			zp_mac[ZIO_DATA_MAC_LEN];
 } zio_prop_t;
 
 typedef struct zio_cksum_report zio_cksum_report_t;
@@ -545,7 +599,7 @@ extern zio_t *zio_write_phys(zio_t *pio, vdev_t *vd, uint64_t offset,
 extern zio_t *zio_free_sync(zio_t *pio, spa_t *spa, uint64_t txg,
     const blkptr_t *bp, uint64_t size, enum zio_flag flags);
 
-extern int zio_alloc_zil(spa_t *spa, uint64_t txg, blkptr_t *new_bp,
+extern int zio_alloc_zil(spa_t *spa, objset_t *os, uint64_t txg, blkptr_t *new_bp,
     blkptr_t *old_bp, uint64_t size, boolean_t *slog);
 extern void zio_free_zil(spa_t *spa, uint64_t txg, blkptr_t *bp);
 extern void zio_flush(zio_t *zio, vdev_t *vd);

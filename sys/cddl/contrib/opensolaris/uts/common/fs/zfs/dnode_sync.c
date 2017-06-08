@@ -548,7 +548,7 @@ dnode_sync(dnode_t *dn, dmu_tx_t *tx)
 	ASSERT(dmu_tx_is_syncing(tx));
 	ASSERT(dnp->dn_type != DMU_OT_NONE || dn->dn_allocated_txg);
 	ASSERT(dnp->dn_type != DMU_OT_NONE ||
-	    bcmp(dnp, &zerodn, DNODE_SIZE) == 0);
+	    bcmp(dnp, &zerodn, DNODE_MIN_SIZE) == 0);
 	DNODE_VERIFY(dn);
 
 	ASSERT(dn->dn_dbuf == NULL || arc_released(dn->dn_dbuf->db_buf));
@@ -612,7 +612,8 @@ dnode_sync(dnode_t *dn, dmu_tx_t *tx)
 			dnp->dn_bonuslen = 0;
 		else
 			dnp->dn_bonuslen = dn->dn_next_bonuslen[txgoff];
-		ASSERT(dnp->dn_bonuslen <= DN_MAX_BONUSLEN);
+		ASSERT(dnp->dn_bonuslen <=
+		       DN_SLOTS_TO_BONUSLEN(dnp->dn_extra_slots + 1));
 		dn->dn_next_bonuslen[txgoff] = 0;
 	}
 

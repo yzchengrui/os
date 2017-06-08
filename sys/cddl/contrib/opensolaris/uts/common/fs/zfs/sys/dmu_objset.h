@@ -57,17 +57,26 @@ struct dmu_tx;
 	(arc_buf_size(buf) > OBJSET_OLD_PHYS_SIZE)
 
 #define	OBJSET_FLAG_USERACCOUNTING_COMPLETE	(1ULL<<0)
+#define OBJSET_FLAG_USEROBJACCOUNTING_COMPLETE  (1ULL<<1)
+
+/* all flags are currently non-portable */
+#define	OBJSET_CRYPT_PORTABLE_FLAGS_MASK	(0)
 
 typedef struct objset_phys {
 	dnode_phys_t os_meta_dnode;
 	zil_header_t os_zil_header;
 	uint64_t os_type;
 	uint64_t os_flags;
+	uint8_t os_portable_mac[ZIO_OBJSET_MAC_LEN];
+	uint8_t os_local_mac[ZIO_OBJSET_MAC_LEN];
 	char os_pad[OBJSET_PHYS_SIZE - sizeof (dnode_phys_t)*3 -
-	    sizeof (zil_header_t) - sizeof (uint64_t)*2];
+	    sizeof (zil_header_t) - sizeof (uint64_t)*2 -
+	    2*ZIO_OBJSET_MAC_LEN];
 	dnode_phys_t os_userused_dnode;
 	dnode_phys_t os_groupused_dnode;
 } objset_phys_t;
+
+typedef int (*dmu_objset_upgrade_cb_t)(objset_t *);
 
 struct objset {
 	/* Immutable: */
@@ -75,6 +84,8 @@ struct objset {
 	spa_t *os_spa;
 	arc_buf_t *os_phys_buf;
 	objset_phys_t *os_phys;
+	boolean_t os_encrypted;
+
 	/*
 	 * The following "special" dnodes have no parent, are exempt
 	 * from dnode_move(), and are not recorded in os_dnodes, but they
@@ -112,7 +123,10 @@ struct objset {
 	zil_header_t os_zil_header;
 	list_t os_synced_dnodes;
 	uint64_t os_flags;
-
+	uint64_t os_freed_dnodes;
+	boolean_t os_rescan_dnodes;
+	boolean_t os_need_raw;	/* os_phys_buf should be written raw next txg */
+	
 	/* Protected by os_obj_lock */
 	kmutex_t os_obj_lock;
 	uint64_t os_obj_next;
@@ -128,6 +142,13 @@ struct objset {
 	kmutex_t os_user_ptr_lock;
 	void *os_user_ptr;
 	sa_os_t *os_sa;
+
+	/* kernel thread to upgrade this dataset */
+        kmutex_t os_upgrade_lock;
+        taskqid_t os_upgrade_id;
+	dmu_objset_upgrade_cb_t os_upgrade_cb;
+        boolean_t os_upgrade_exit;
+        int os_upgrade_status;
 };
 
 #define	DMU_META_OBJSET		0
@@ -145,13 +166,18 @@ struct objset {
 
 /* called from zpl */
 int dmu_objset_hold(const char *name, void *tag, objset_t **osp);
+int dmu_objset_hold_flags(const char *name, boolean_t decrypt, void *tag,
+    objset_t **osp);
 int dmu_objset_own(const char *name, dmu_objset_type_t type,
-    boolean_t readonly, void *tag, objset_t **osp);
+    boolean_t readonly, boolean_t decrypt, void *tag, objset_t **osp);
 int dmu_objset_own_obj(struct dsl_pool *dp, uint64_t obj,
-    dmu_objset_type_t type, boolean_t readonly, void *tag, objset_t **osp);
-void dmu_objset_refresh_ownership(objset_t *os, void *tag);
+    dmu_objset_type_t type, boolean_t readonly, boolean_t decrypt,
+    void *tag, objset_t **osp);
+void dmu_objset_refresh_ownership(objset_t *os, boolean_t key_needed,
+    void *tag);
 void dmu_objset_rele(objset_t *os, void *tag);
-void dmu_objset_disown(objset_t *os, void *tag);
+void dmu_objset_rele_flags(objset_t *os, boolean_t decrypt, void *tag);
+void dmu_objset_disown(objset_t *os, boolean_t decrypt, void *tag);
 int dmu_objset_from_ds(struct dsl_dataset *ds, objset_t **osp);
 
 void dmu_objset_stats(objset_t *os, nvlist_t *nv);
@@ -169,6 +195,9 @@ timestruc_t dmu_objset_snap_cmtime(objset_t *os);
 /* called from dsl */
 void dmu_objset_sync(objset_t *os, zio_t *zio, dmu_tx_t *tx);
 boolean_t dmu_objset_is_dirty(objset_t *os, uint64_t txg);
+objset_t *dmu_objset_create_impl_dnstats(spa_t *spa, struct dsl_dataset *ds,
+    blkptr_t *bp, dmu_objset_type_t type, int levels, int blksz, int ibs,
+    dmu_tx_t *tx);
 objset_t *dmu_objset_create_impl(spa_t *spa, struct dsl_dataset *ds,
     blkptr_t *bp, dmu_objset_type_t type, dmu_tx_t *tx);
 int dmu_objset_open_impl(spa_t *spa, struct dsl_dataset *ds, blkptr_t *bp,
@@ -179,6 +208,11 @@ void dmu_objset_userquota_get_ids(dnode_t *dn, boolean_t before, dmu_tx_t *tx);
 boolean_t dmu_objset_userused_enabled(objset_t *os);
 int dmu_objset_userspace_upgrade(objset_t *os);
 boolean_t dmu_objset_userspace_present(objset_t *os);
+boolean_t dmu_objset_userobjused_enabled(objset_t *os);
+boolean_t dmu_objset_userobjspace_upgradable(objset_t *os);
+void dmu_objset_userobjspace_upgrade(objset_t *os);
+boolean_t dmu_objset_userobjspace_present(objset_t *os);
+
 int dmu_fsname(const char *snapname, char *buf);
 
 void dmu_objset_evict_done(objset_t *os);

@@ -36,6 +36,7 @@
 extern "C" {
 #endif
 
+
 /* Common signature for all zio compress functions. */
 typedef size_t zio_compress_func_t(void *src, void *dst,
     size_t s_len, size_t d_len, int);

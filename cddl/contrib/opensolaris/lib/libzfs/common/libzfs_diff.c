@@ -116,11 +116,16 @@ get_stats_for_obj(differ_info_t *di, const char *dsname, uint64_t obj,
 		    "The sys_config privilege or diff delegated permission "
 		    "is needed\nto discover path names"));
 		return (-1);
+	} else if (di->zerr == EACCES) {
+		(void) snprintf(di->errbuf, sizeof (di->errbuf),
+		    dgettext(TEXT_DOMAIN,
+		    "Key must be loaded to discover path names"));
+		return (-1);
 	} else {
 		(void) snprintf(di->errbuf, sizeof (di->errbuf),
 		    dgettext(TEXT_DOMAIN,
 		    "Unable to determine path or stats for "
-		    "object %lld in %s"), obj, dsname);
+			     "object %lld in %s"), (long long)obj, dsname);
 		return (-1);
 	}
 }
@@ -415,7 +420,7 @@ write_free_diffs(FILE *fp, differ_info_t *di, dmu_diff_record_t *dr)
 			(void) snprintf(di->errbuf, sizeof (di->errbuf),
 			    dgettext(TEXT_DOMAIN,
 			    "next allocated object (> %lld) find failure"),
-			    zc.zc_obj);
+					(long long)zc.zc_obj);
 			di->zerr = errno;
 			break;
 		}

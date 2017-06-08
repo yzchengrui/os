@@ -18,6 +18,7 @@ SRCS=	deviceid.c \
 SRCS+=	libzfs_changelist.c \
 	libzfs_compat.c \
 	libzfs_config.c \
+	libzfs_crypto.c \
 	libzfs_dataset.c \
 	libzfs_diff.c \
 	libzfs_import.c \

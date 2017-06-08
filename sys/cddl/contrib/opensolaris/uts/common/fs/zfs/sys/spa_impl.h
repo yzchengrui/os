@@ -41,6 +41,7 @@
 #include <sys/refcount.h>
 #include <sys/bplist.h>
 #include <sys/bpobj.h>
+#include <sys/dsl_crypt.h>
 #include <sys/zfeature.h>
 #include <zfeature_common.h>
 
@@ -288,6 +289,7 @@ struct spa {
 		int spa_queued;
 	} spa_queue_stats[ZIO_PRIORITY_NUM_QUEUEABLE];
 #endif
+	spa_keystore_t	spa_keystore;		/* loaded crypto keys */
 	hrtime_t	spa_ccw_fail_time;	/* Conf cache write fail time */
 
 	/*
@@ -301,6 +303,7 @@ struct spa {
 #ifndef illumos
 	boolean_t	spa_splitting_newspa;	/* creating new spa in split */
 #endif
+	taskq_t		*spa_upgrade_taskq;	/* taskq for upgrade jobs */
 };
 
 extern const char *spa_config_path;

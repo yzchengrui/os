@@ -386,7 +386,7 @@ typedef struct zfs_cmd_inlanes {
 	zfs_share_t	zc_share;
 	uint64_t	zc_jailid;
 	dmu_objset_stats_t zc_objset_stats;
-	dmu_replay_record_t zc_begin_record;
+	struct drr_begin zc_begin_record;
 	zinject_record_t zc_inject_record;
 	uint32_t	zc_defer_destroy;
 	uint32_t	zc_flags;

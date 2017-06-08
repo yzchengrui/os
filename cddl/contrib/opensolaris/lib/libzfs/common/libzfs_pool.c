@@ -264,7 +264,7 @@ zpool_get_prop(zpool_handle_t *zhp, zpool_prop_t prop, char *buf, size_t len,
 
 		case ZPOOL_PROP_GUID:
 			intval = zpool_get_prop_int(zhp, prop, &src);
-			(void) snprintf(buf, len, "%llu", intval);
+			(void) snprintf(buf, len, "%llu", (long long)intval);
 			break;
 
 		case ZPOOL_PROP_ALTROOT:
@@ -363,7 +363,7 @@ zpool_get_prop(zpool_handle_t *zhp, zpool_prop_t prop, char *buf, size_t len,
 			}
 			/* FALLTHROUGH */
 		default:
-			(void) snprintf(buf, len, "%llu", intval);
+			(void) snprintf(buf, len, "%llu", (long long)intval);
 		}
 		break;
 
@@ -1102,6 +1102,9 @@ zpool_create(libzfs_handle_t *hdl, const char *pool, nvlist_t *nvroot,
 	zfs_cmd_t zc = { 0 };
 	nvlist_t *zc_fsprops = NULL;
 	nvlist_t *zc_props = NULL;
+	nvlist_t *hidden_args = NULL;
+	uint8_t *wkeydata = NULL;
+	uint_t wkeylen = 0;
 	char msg[1024];
 	int ret = -1;
 
@@ -1132,16 +1135,33 @@ zpool_create(libzfs_handle_t *hdl, const char *pool, nvlist_t *nvroot,
 		    strcmp(zonestr, "on") == 0);
 
 		if ((zc_fsprops = zfs_valid_proplist(hdl, ZFS_TYPE_FILESYSTEM,
-		    fsprops, zoned, NULL, NULL, msg)) == NULL) {
+		    fsprops, zoned, NULL, NULL, B_TRUE, msg)) == NULL) {
 			goto create_failed;
 		}
 		if (!zc_props &&
 		    (nvlist_alloc(&zc_props, NV_UNIQUE_NAME, 0) != 0)) {
 			goto create_failed;
 		}
+		if (zfs_crypto_create(hdl, NULL, zc_fsprops, props,
+		    &wkeydata, &wkeylen) != 0) {
+			zfs_error(hdl, EZFS_CRYPTOFAILED, msg);
+			goto create_failed;
+		}
 		if (nvlist_add_nvlist(zc_props,
 		    ZPOOL_ROOTFS_PROPS, zc_fsprops) != 0) {
 			goto create_failed;
+		}
+		if (wkeydata != NULL) {
+			if (nvlist_alloc(&hidden_args, NV_UNIQUE_NAME, 0) != 0)
+				goto create_failed;
+
+			if (nvlist_add_uint8_array(hidden_args, "wkeydata",
+			    wkeydata, wkeylen) != 0)
+				goto create_failed;
+
+			if (nvlist_add_nvlist(zc_props, ZPOOL_HIDDEN_ARGS,
+			    hidden_args) != 0)
+				goto create_failed;
 		}
 	}
 
@@ -1155,6 +1175,9 @@ zpool_create(libzfs_handle_t *hdl, const char *pool, nvlist_t *nvroot,
 		zcmd_free_nvlists(&zc);
 		nvlist_free(zc_props);
 		nvlist_free(zc_fsprops);
+		nvlist_free(hidden_args);
+		if (wkeydata != NULL)
+			free(wkeydata);
 
 		switch (errno) {
 		case EBUSY:
@@ -1220,6 +1243,9 @@ create_failed:
 	zcmd_free_nvlists(&zc);
 	nvlist_free(zc_props);
 	nvlist_free(zc_fsprops);
+	nvlist_free(hidden_args);
+	if (wkeydata != NULL)
+		free(wkeydata);
 	return (ret);
 }
 
@@ -1466,7 +1492,7 @@ zpool_rewind_exclaim(libzfs_handle_t *hdl, const char *name, boolean_t dryrun,
 		} else if (loss > 0) {
 			(void) printf(dgettext(TEXT_DOMAIN,
 			    "%s approximately %lld "),
-			    dryrun ? "Would discard" : "Discarded", loss);
+				      dryrun ? "Would discard" : "Discarded", (long long)loss);
 			(void) printf(dgettext(TEXT_DOMAIN,
 			    "seconds of transactions.\n"));
 		}
@@ -1520,11 +1546,11 @@ zpool_explain_recover(libzfs_handle_t *hdl, const char *name, int reason,
 	if (loss > 120) {
 		(void) printf(dgettext(TEXT_DOMAIN,
 		    "Approximately %lld minutes of data\n"
-		    "\tmust be discarded, irreversibly.  "), (loss + 30) / 60);
+				       "\tmust be discarded, irreversibly.  "), (long long)((loss + 30) / 60));
 	} else if (loss > 0) {
 		(void) printf(dgettext(TEXT_DOMAIN,
 		    "Approximately %lld seconds of data\n"
-		    "\tmust be discarded, irreversibly.  "), loss);
+				       "\tmust be discarded, irreversibly.  "), (long long)loss);
 	}
 	if (edata != 0 && edata != UINT64_MAX) {
 		if (edata == 1) {
@@ -2520,7 +2546,7 @@ zpool_vdev_fault(zpool_handle_t *zhp, uint64_t guid, vdev_aux_t aux)
 	libzfs_handle_t *hdl = zhp->zpool_hdl;
 
 	(void) snprintf(msg, sizeof (msg),
-	    dgettext(TEXT_DOMAIN, "cannot fault %llu"), guid);
+			dgettext(TEXT_DOMAIN, "cannot fault %llu"), (unsigned long long)guid);
 
 	(void) strlcpy(zc.zc_name, zhp->zpool_name, sizeof (zc.zc_name));
 	zc.zc_guid = guid;
@@ -2555,7 +2581,7 @@ zpool_vdev_degrade(zpool_handle_t *zhp, uint64_t guid, vdev_aux_t aux)
 	libzfs_handle_t *hdl = zhp->zpool_hdl;
 
 	(void) snprintf(msg, sizeof (msg),
-	    dgettext(TEXT_DOMAIN, "cannot degrade %llu"), guid);
+			dgettext(TEXT_DOMAIN, "cannot degrade %llu"), (unsigned long long)guid);
 
 	(void) strlcpy(zc.zc_name, zhp->zpool_name, sizeof (zc.zc_name));
 	zc.zc_guid = guid;
@@ -3211,7 +3237,7 @@ zpool_vdev_clear(zpool_handle_t *zhp, uint64_t guid)
 
 	(void) snprintf(msg, sizeof (msg),
 	    dgettext(TEXT_DOMAIN, "cannot clear errors for %llx"),
-	    guid);
+			(long long)guid);
 
 	(void) strlcpy(zc.zc_name, zhp->zpool_name, sizeof (zc.zc_name));
 	zc.zc_guid = guid;
@@ -3807,7 +3833,7 @@ zpool_obj_to_path(zpool_handle_t *zhp, uint64_t dsobj, uint64_t obj,
 
 	if (dsobj == 0) {
 		/* special case for the MOS */
-		(void) snprintf(pathname, len, "<metadata>:<0x%llx>", obj);
+		(void) snprintf(pathname, len, "<metadata>:<0x%llx>", (long long)obj);
 		return;
 	}
 
@@ -3818,7 +3844,7 @@ zpool_obj_to_path(zpool_handle_t *zhp, uint64_t dsobj, uint64_t obj,
 	    ZFS_IOC_DSOBJ_TO_DSNAME, &zc) != 0) {
 		/* just write out a path of two object numbers */
 		(void) snprintf(pathname, len, "<0x%llx>:<0x%llx>",
-		    dsobj, obj);
+				(long long)dsobj, (long long)obj);
 		return;
 	}
 	(void) strlcpy(dsname, zc.zc_value, sizeof (dsname));

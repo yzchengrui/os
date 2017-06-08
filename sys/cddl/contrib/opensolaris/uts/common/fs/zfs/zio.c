@@ -37,11 +37,13 @@
 #include <sys/zio_checksum.h>
 #include <sys/dmu_objset.h>
 #include <sys/arc.h>
+#include <sys/zio_crypt.h>
 #include <sys/ddt.h>
 #include <sys/trim_map.h>
 #include <sys/blkptr.h>
 #include <sys/zfeature.h>
 #include <sys/metaslab_impl.h>
+#include <sys/dsl_crypt.h>
 
 SYSCTL_DECL(_vfs_zfs);
 SYSCTL_NODE(_vfs_zfs, OID_AUTO, zio, CTLFLAG_RW, 0, "ZFS ZIO");
@@ -392,7 +394,7 @@ zio_pop_transforms(zio_t *zio)
 
 /*
  * ==========================================================================
- * I/O transform callbacks for subblocks and decompression
+ * I/O transform callbacks for subblocks, decompression, and decryption
  * ==========================================================================
  */
 static void
@@ -411,6 +413,111 @@ zio_decompress(zio_t *zio, void *data, uint64_t size)
 	    zio_decompress_data(BP_GET_COMPRESS(zio->io_bp),
 	    zio->io_data, data, zio->io_size, size) != 0)
 		zio->io_error = SET_ERROR(EIO);
+}
+
+// XXX: I replaced the abd functions, possibly to facilely, and perhaps I need
+// to allocate buffers and copy.
+static void
+zio_decrypt(zio_t *zio, void *data, uint64_t size)
+{
+	int ret;
+	void *tmp;
+	blkptr_t *bp = zio->io_bp;
+	uint64_t lsize = BP_GET_LSIZE(bp);
+	dmu_object_type_t ot = BP_GET_TYPE(bp);
+	uint8_t salt[ZIO_DATA_SALT_LEN];
+	uint8_t iv[ZIO_DATA_IV_LEN];
+	uint8_t mac[ZIO_DATA_MAC_LEN];
+	boolean_t no_crypt = B_FALSE;
+
+	ASSERT(BP_USES_CRYPT(bp));
+	ASSERT3U(size, !=, 0);
+
+	if (zio->io_error != 0)
+		return;
+
+	/*
+	 * Verify the cksum of MACs stored in an indirect bp. It will always
+	 * be possible to verify this since it does not require an encryption
+	 * key.
+	 */
+	if (BP_HAS_INDIRECT_MAC_CKSUM(bp)) {
+		zio_crypt_decode_mac_bp(bp, mac);
+
+		if (BP_GET_COMPRESS(bp) != ZIO_COMPRESS_OFF) {
+			/*
+			 * We haven't decompressed the data yet, but we need
+			 * the zio_crypt_do_indirect_mac_checksum() requires
+			 * decompressed data to be able to parse out the MACs
+			 * from the indirect block. We decompress it now and
+			 * throw away the result after we are finished.
+			 */
+			tmp = zio_buf_alloc(lsize);
+			ret = zio_decompress_data(BP_GET_COMPRESS(bp),
+			    zio->io_data, tmp, zio->io_size, lsize);
+			if (ret != 0) {
+				ret = SET_ERROR(EIO);
+				goto error;
+			}
+			ret = zio_crypt_do_indirect_mac_checksum(B_FALSE,
+			    tmp, lsize, BP_SHOULD_BYTESWAP(bp), mac);
+			zio_buf_free(tmp, lsize);
+		} else {
+			ret = zio_crypt_do_indirect_mac_checksum(B_FALSE,
+			    zio->io_data, size, BP_SHOULD_BYTESWAP(bp), mac);
+		}
+		bcopy(zio->io_data, data, size);
+
+		if (ret != 0)
+			goto error;
+
+		return;
+	}
+
+	/*
+	 * If this is an authenticated block, just check the MAC. It would be
+	 * nice to separate this out into its own flag, but for the moment
+	 * enum zio_flag is out of bits.
+	 */
+	if (BP_IS_AUTHENTICATED(bp)) {
+		if (ot == DMU_OT_OBJSET) {
+			ret = spa_do_crypt_objset_mac_data(B_FALSE, zio->io_spa,
+			    zio->io_bookmark.zb_objset, zio->io_data, size,
+			    BP_SHOULD_BYTESWAP(bp));
+		} else {
+			zio_crypt_decode_mac_bp(bp, mac);
+			ret = spa_do_crypt_mac_data(B_FALSE, zio->io_spa,
+			    zio->io_bookmark.zb_objset, zio->io_data, size, mac);
+		}
+		bcopy(zio->io_data, data, size);
+
+		if (ret != 0)
+			goto error;
+
+		return;
+	}
+
+	zio_crypt_decode_params_bp(bp, salt, iv);
+
+	if (ot == DMU_OT_INTENT_LOG) {
+		zio_crypt_decode_mac_zil(zio->io_data, mac);
+	} else {
+		zio_crypt_decode_mac_bp(bp, mac);
+	}
+
+	ret = spa_do_crypt_buf(B_FALSE, zio->io_spa, zio->io_bookmark.zb_objset,
+	    bp, bp->blk_birth, size, data, zio->io_data, iv, mac, salt,
+	    &no_crypt);
+
+	if (ret != 0)
+		goto error;
+
+	return;
+
+error:
+	/* assert that the key was found unless this was speculative */
+	ASSERT(ret != ENOENT || (zio->io_flags & ZIO_FLAG_SPECULATIVE));
+	zio->io_error = ret;
 }
 
 /*
@@ -855,9 +962,12 @@ zio_write(zio_t *pio, spa_t *spa, uint64_t txg, blkptr_t *bp,
 	 * Data can be NULL if we are going to call zio_write_override() to
 	 * provide the already-allocated BP.  But we may need the data to
 	 * verify a dedup hit (if requested).  In this case, don't try to
-	 * dedup (just take the already-allocated BP verbatim).
+	 * dedup (just take the already-allocated BP verbatim). Encrypted
+	 * dedup blocks need data as well so we also disable dedup in this
+	 * case.
 	 */
-	if (data == NULL && zio->io_prop.zp_dedup_verify) {
+	if (data == NULL &&
+	    (zio->io_prop.zp_dedup_verify || zio->io_prop.zp_encrypt)) {
 		zio->io_prop.zp_dedup = zio->io_prop.zp_dedup_verify = B_FALSE;
 	}
 
@@ -1215,15 +1325,22 @@ static int
 zio_read_bp_init(zio_t *zio)
 {
 	blkptr_t *bp = zio->io_bp;
+	uint64_t psize =
+		BP_IS_EMBEDDED(bp) ? BPE_GET_PSIZE(bp) : BP_GET_PSIZE(bp);
 
 	if (BP_GET_COMPRESS(bp) != ZIO_COMPRESS_OFF &&
 	    zio->io_child_type == ZIO_CHILD_LOGICAL &&
-	    !(zio->io_flags & ZIO_FLAG_RAW)) {
-		uint64_t psize =
-		    BP_IS_EMBEDDED(bp) ? BPE_GET_PSIZE(bp) : BP_GET_PSIZE(bp);
+	    !(zio->io_flags & ZIO_FLAG_RAW_COMPRESS)) {
 		void *cbuf = zio_buf_alloc(psize);
 
 		zio_push_transform(zio, cbuf, psize, psize, zio_decompress);
+	}
+
+	if (((BP_IS_PROTECTED(bp) && !(zio->io_flags & ZIO_FLAG_RAW_ENCRYPT)) ||
+	    BP_HAS_INDIRECT_MAC_CKSUM(bp)) &&
+	    zio->io_child_type == ZIO_CHILD_LOGICAL) {
+		void *cbuf = zio_buf_alloc(psize);
+		zio_push_transform(zio, cbuf, psize, psize, zio_decrypt);
 	}
 
 	if (BP_IS_EMBEDDED(bp) && BPE_GET_ETYPE(bp) == BP_EMBEDDED_TYPE_DATA) {
@@ -1286,7 +1403,8 @@ zio_write_bp_init(zio_t *zio)
 		ASSERT((zio_checksum_table[zp->zp_checksum].ci_flags &
 		    ZCHECKSUM_FLAG_DEDUP) || zp->zp_dedup_verify);
 
-		if (BP_GET_CHECKSUM(bp) == zp->zp_checksum) {
+		if (BP_GET_CHECKSUM(bp) == zp->zp_checksum &&
+		    !zp->zp_encrypt) {
 			BP_SET_DEDUP(bp, 1);
 			zio->io_pipeline |= ZIO_STAGE_DDT_WRITE;
 			return (ZIO_PIPELINE_CONTINUE);
@@ -1363,13 +1481,15 @@ zio_write_compress(zio_t *zio)
 		    spa_max_replication(spa)) == BP_GET_NDVAS(bp));
 	}
 
-	if (compress != ZIO_COMPRESS_OFF) {
+	if (compress != ZIO_COMPRESS_OFF &&
+	    !(zio->io_flags & ZIO_FLAG_RAW_COMPRESS)) {
 		void *cbuf = zio_buf_alloc(lsize);
 		psize = zio_compress_data(compress, zio->io_data, cbuf, lsize);
 		if (psize == 0 || psize == lsize) {
 			compress = ZIO_COMPRESS_OFF;
 			zio_buf_free(cbuf, lsize);
-		} else if (!zp->zp_dedup && psize <= BPE_PAYLOAD_SIZE &&
+		} else if (!zp->zp_dedup && !zp->zp_encrypt &&
+			   psize <= BPE_PAYLOAD_SIZE &&
 		    zp->zp_level == 0 && !DMU_OT_HAS_FILL(zp->zp_type) &&
 		    spa_feature_is_enabled(spa, SPA_FEATURE_EMBEDDED_DATA)) {
 			encode_embedded_bp_compressed(bp,
@@ -2199,11 +2319,20 @@ zio_write_gang_block(zio_t *pio)
 	uint64_t resid = pio->io_size;
 	uint64_t lsize;
 	int copies = gio->io_prop.zp_copies;
-	int gbh_copies = MIN(copies + 1, spa_max_replication(spa));
+	int gbh_copies;
 	zio_prop_t zp;
 	int error;
 
 	int flags = METASLAB_HINTBP_FAVOR | METASLAB_GANG_HEADER;
+
+	/*
+	 * encrypted blocks need DVA[2] free so encrypted gang headers can't
+	 * have a third copy.
+	 */
+	gbh_copies = MIN(copies + 1, spa_max_replication(spa));
+	if (gio->io_prop.zp_encrypt && gbh_copies >= SPA_DVAS_PER_BP)
+		gbh_copies = SPA_DVAS_PER_BP - 1;
+
 	if (pio->io_flags & ZIO_FLAG_IO_ALLOCATING) {
 		ASSERT(pio->io_priority == ZIO_PRIORITY_ASYNC_WRITE);
 		ASSERT(!(pio->io_flags & ZIO_FLAG_NODATA));
@@ -2271,12 +2400,16 @@ zio_write_gang_block(zio_t *pio)
 
 		zp.zp_checksum = gio->io_prop.zp_checksum;
 		zp.zp_compress = ZIO_COMPRESS_OFF;
+		zp.zp_encrypt = gio->io_prop.zp_encrypt;
 		zp.zp_type = DMU_OT_NONE;
 		zp.zp_level = 0;
 		zp.zp_copies = gio->io_prop.zp_copies;
 		zp.zp_dedup = B_FALSE;
 		zp.zp_dedup_verify = B_FALSE;
 		zp.zp_nopwrite = B_FALSE;
+		bzero(zp.zp_salt, ZIO_DATA_SALT_LEN);
+		bzero(zp.zp_iv, ZIO_DATA_IV_LEN);
+		bzero(zp.zp_mac, ZIO_DATA_MAC_LEN);
 
 		zio_t *cio = zio_write(zio, spa, txg, &gbh->zg_blkptr[g],
 		    (char *)pio->io_data + (pio->io_size - resid), lsize, &zp,
@@ -2350,6 +2483,7 @@ zio_nop_write(zio_t *zio)
 	if (BP_IS_HOLE(bp_orig) ||
 	    !(zio_checksum_table[BP_GET_CHECKSUM(bp)].ci_flags &
 	    ZCHECKSUM_FLAG_NOPWRITE) ||
+	    BP_IS_ENCRYPTED(bp) || BP_IS_ENCRYPTED(bp_orig) ||
 	    BP_GET_CHECKSUM(bp) != BP_GET_CHECKSUM(bp_orig) ||
 	    BP_GET_COMPRESS(bp) != BP_GET_COMPRESS(bp_orig) ||
 	    BP_GET_DEDUP(bp) != BP_GET_DEDUP(bp_orig) ||
@@ -2937,7 +3071,7 @@ zio_dva_unallocate(zio_t *zio, zio_gang_node_t *gn, blkptr_t *bp)
  * Try to allocate an intent log block.  Return 0 on success, errno on failure.
  */
 int
-zio_alloc_zil(spa_t *spa, uint64_t txg, blkptr_t *new_bp, blkptr_t *old_bp,
+zio_alloc_zil(spa_t *spa, objset_t *os, uint64_t txg, blkptr_t *new_bp, blkptr_t *old_bp,
     uint64_t size, boolean_t *slog)
 {
 	int error = 1;
@@ -2966,6 +3100,23 @@ zio_alloc_zil(spa_t *spa, uint64_t txg, blkptr_t *new_bp, blkptr_t *old_bp,
 		BP_SET_LEVEL(new_bp, 0);
 		BP_SET_DEDUP(new_bp, 0);
 		BP_SET_BYTEORDER(new_bp, ZFS_HOST_BYTEORDER);
+
+		/*
+		 * encrypted blocks will require an IV and salt. We generate
+		 * these now since we will not be rewriting the bp at
+		 * rewrite time.
+		 */
+		if (os->os_encrypted) {
+			uint8_t iv[ZIO_DATA_IV_LEN];
+			uint8_t salt[ZIO_DATA_SALT_LEN];
+
+			BP_SET_CRYPT(new_bp, B_TRUE);
+			VERIFY0(spa_crypt_get_salt(spa,
+			    dmu_objset_id(os), salt));
+			VERIFY0(zio_crypt_generate_iv(iv));
+
+			zio_crypt_encode_params_bp(new_bp, salt, iv);
+		}
 	}
 
 	return (error);
@@ -3332,6 +3483,144 @@ zio_vdev_io_bypass(zio_t *zio)
 
 	zio->io_flags |= ZIO_FLAG_IO_BYPASS;
 	zio->io_stage = ZIO_STAGE_VDEV_IO_ASSESS >> 1;
+}
+
+/*
+ * ==========================================================================
+ * Encrypt and store encryption parameters
+ * ==========================================================================
+ */
+
+
+/*
+ * This function is used for ZIO_STAGE_ENCRYPT. It is responsible for
+ * managing the storage of encryption parameters and passing them to the
+ * lower-level encryption functions.
+ */
+static int
+zio_encrypt(zio_t *zio)
+{
+	zio_prop_t *zp = &zio->io_prop;
+	spa_t *spa = zio->io_spa;
+	blkptr_t *bp = zio->io_bp;
+	uint64_t psize = BP_GET_PSIZE(bp);
+	dmu_object_type_t ot = BP_GET_TYPE(bp);
+	void *enc_buf = NULL;
+	uint8_t salt[ZIO_DATA_SALT_LEN];
+	uint8_t iv[ZIO_DATA_IV_LEN];
+	uint8_t mac[ZIO_DATA_MAC_LEN];
+	boolean_t no_crypt = B_FALSE;
+
+	/* the root zio already encrypted the data */
+	if (zio->io_child_type == ZIO_CHILD_GANG)
+		return (ZIO_PIPELINE_CONTINUE);
+
+	/* only ZIL blocks are re-encrypted on rewrite */
+	if (!IO_IS_ALLOCATING(zio) &&
+	    BP_GET_TYPE(bp) != DMU_OT_INTENT_LOG)
+		return (ZIO_PIPELINE_CONTINUE);
+
+	if (!(zp->zp_encrypt || BP_IS_ENCRYPTED(bp))) {
+		BP_SET_CRYPT(bp, B_FALSE);
+		return (ZIO_PIPELINE_CONTINUE);
+	}
+
+	/* if we are doing raw encryption set the provided encryption params */
+	if (zio->io_flags & ZIO_FLAG_RAW_ENCRYPT) {
+		BP_SET_CRYPT(bp, B_TRUE);
+		BP_SET_BYTEORDER(bp, zp->zp_byteorder);
+		if (ot != DMU_OT_OBJSET)
+			zio_crypt_encode_mac_bp(bp, zp->zp_mac);
+		if (DMU_OT_IS_ENCRYPTED(ot))
+			zio_crypt_encode_params_bp(bp, zp->zp_salt, zp->zp_iv);
+		return (ZIO_PIPELINE_CONTINUE);
+	}
+
+	/* indirect blocks only maintain a cksum of the lower level MACs */
+	if (BP_GET_LEVEL(bp) > 0) {
+		BP_SET_CRYPT(bp, B_TRUE);
+		VERIFY0(zio_crypt_do_indirect_mac_checksum(B_TRUE,
+		    zio->io_data, BP_GET_LSIZE(bp), BP_SHOULD_BYTESWAP(bp),
+		    mac));
+		zio_crypt_encode_mac_bp(bp, mac);
+		return (ZIO_PIPELINE_CONTINUE);
+	}
+
+	/*
+	 * Objset blocks are a special case since they have 2 256-bit MACs
+	 * embedded within them.
+	 */
+	if (ot == DMU_OT_OBJSET) {
+		ASSERT0(DMU_OT_IS_ENCRYPTED(ot));
+		ASSERT3U(BP_GET_COMPRESS(bp), ==, ZIO_COMPRESS_OFF);
+		BP_SET_CRYPT(bp, B_TRUE);
+		VERIFY0(spa_do_crypt_objset_mac_data(B_TRUE, spa,
+		    zio->io_bookmark.zb_objset, zio->io_data, psize,
+		    BP_SHOULD_BYTESWAP(bp)));
+		return (ZIO_PIPELINE_CONTINUE);
+	}
+
+	/* unencrypted object types are only authenticated with a MAC */
+	if (!DMU_OT_IS_ENCRYPTED(ot)) {
+		BP_SET_CRYPT(bp, B_TRUE);
+		VERIFY0(spa_do_crypt_mac_data(B_TRUE, spa,
+		    zio->io_bookmark.zb_objset, zio->io_data, psize, mac));
+		zio_crypt_encode_mac_bp(bp, mac);
+		return (ZIO_PIPELINE_CONTINUE);
+	}
+
+	/*
+	 * Later passes of sync-to-convergence may decide to rewrite data
+	 * in place to avoid more disk reallocations. This presents a problem
+	 * for encryption because this consitutes rewriting the new data with
+	 * the same encryption key and IV. However, this only applies to blocks
+	 * in the MOS (particularly the spacemaps) and we do not encrypt the
+	 * MOS. We assert that the zio is allocating or an intent log write
+	 * to enforce this.
+	 */
+	ASSERT(IO_IS_ALLOCATING(zio) || ot == DMU_OT_INTENT_LOG);
+	ASSERT(BP_GET_LEVEL(bp) == 0 || ot == DMU_OT_INTENT_LOG);
+	ASSERT(spa_feature_is_active(spa, SPA_FEATURE_ENCRYPTION));
+	ASSERT3U(psize, !=, 0);
+
+	enc_buf = zio_buf_alloc(psize);
+
+	/*
+	 * For an explanation of what encryption parameters are stored
+	 * where, see the block comment in zio_crypt.c.
+	 */
+	if (ot == DMU_OT_INTENT_LOG) {
+		zio_crypt_decode_params_bp(bp, salt, iv);
+	} else {
+		BP_SET_CRYPT(bp, B_TRUE);
+	}
+
+	/* Perform the encryption. This should not fail */
+	VERIFY0(spa_do_crypt_data(B_TRUE, spa, zio->io_bookmark.zb_objset, bp,
+	    zio->io_txg, psize, zio->io_data, enc_buf, iv, mac, salt, &no_crypt));
+
+	/* encode encryption metadata into the bp */
+	if (ot == DMU_OT_INTENT_LOG) {
+		/*
+		 * ZIL blocks store the MAC in the embedded checksum, so the
+		 * transform must always be applied.
+		 */
+		zio_crypt_encode_mac_zil(enc_buf, mac);
+		zio_push_transform(zio, enc_buf, psize, psize, NULL);
+	} else {
+		BP_SET_CRYPT(bp, B_TRUE);
+		zio_crypt_encode_params_bp(bp, salt, iv);
+		zio_crypt_encode_mac_bp(bp, mac);
+
+		if (no_crypt) {
+			ASSERT3U(ot, ==, DMU_OT_DNODE);
+			// ? zio_buf_free(enc_buf, psize);
+		} else {
+			zio_push_transform(zio, enc_buf, psize, psize, NULL);
+		}
+	}
+
+	return (ZIO_PIPELINE_CONTINUE);
 }
 
 /*
@@ -3895,6 +4184,7 @@ static zio_pipe_stage_t *zio_pipeline[] = {
 	zio_free_bp_init,
 	zio_issue_async,
 	zio_write_compress,
+	zio_encrypt,
 	zio_checksum_generate,
 	zio_nop_write,
 	zio_ddt_read_start,

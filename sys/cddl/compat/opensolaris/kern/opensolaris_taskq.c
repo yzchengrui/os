@@ -61,6 +61,13 @@ system_taskq_fini(void *arg)
 }
 SYSUNINIT(system_taskq_fini, SI_SUB_CONFIGURE, SI_ORDER_ANY, system_taskq_fini, NULL);
 
+void
+taskq_cancel_id(taskq_t *queue, taskqid_t id)
+{
+	u_int dc = 0;
+	(void)taskqueue_cancel(tq->queue, id, &dc);
+	
+}
 taskq_t *
 taskq_create(const char *name, int nthreads, pri_t pri, int minalloc __unused,
     int maxalloc __unused, uint_t flags)
