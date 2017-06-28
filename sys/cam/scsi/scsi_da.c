@@ -684,6 +684,13 @@ static struct da_quirk_entry da_quirk_table[] =
 	},
 	{
 		/*
+		 * Genesys GL3224
+		 */
+		{T_DIRECT, SIP_MEDIA_REMOVABLE, "Generic*", "STORAGE DEVICE*",
+		"120?"}, /*quirks*/ DA_Q_NO_SYNC_CACHE | DA_Q_4K | DA_Q_NO_RC16
+	},
+	{
+		/*
 		 * Genesys 6-in-1 Card Reader
 		 * PR: usb/94647
 		 */
@@ -5797,6 +5804,7 @@ scsi_zbc_in(struct ccb_scsiio *csio, uint32_t retries,
 	scsi_cmd = (struct scsi_zbc_in *)&csio->cdb_io.cdb_bytes;
 	scsi_cmd->opcode = ZBC_IN;
 	scsi_cmd->service_action = service_action;
+	scsi_ulto4b(dxfer_len, scsi_cmd->length);
 	scsi_u64to8b(zone_start_lba, scsi_cmd->zone_start_lba);
 	scsi_cmd->zone_options = zone_options;
 

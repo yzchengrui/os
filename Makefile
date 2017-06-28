@@ -127,11 +127,11 @@ TGTS=	all all-man buildenv buildenvvars buildkernel buildworld \
 	installworld kernel-toolchain libraries lint maninstall \
 	obj objlink rerelease showconfig tags toolchain update \
 	_worldtmp _legacy _bootstrap-tools _cleanobj _obj \
-	_build-tools _compiler-metadata _cross-tools _includes _libraries \
+	_build-tools _build-metadata _cross-tools _includes _libraries \
 	build32 distribute32 install32 buildsoft distributesoft installsoft \
 	builddtb xdev xdev-build xdev-install \
 	xdev-links native-xtools stageworld stagekernel stage-packages \
-	create-world-packages create-kernel-packages create-packages \
+	create-packages-world create-packages-kernel create-packages \
 	packages installconfig real-packages sign-packages package-pkg \
 	print-dir test-system-compiler
 
@@ -195,7 +195,8 @@ HAVE_MAKE=	bmake
 .else
 HAVE_MAKE=	fmake
 .endif
-.if ${HAVE_MAKE} != ${WANT_MAKE} || \
+.if defined(ALWAYS_BOOTSTRAP_MAKE) || \
+    ${HAVE_MAKE} != ${WANT_MAKE} || \
     (defined(WANT_MAKE_VERSION) && ${MAKE_VERSION} < ${WANT_MAKE_VERSION})
 NEED_MAKE_UPGRADE= t
 .endif
@@ -522,6 +523,8 @@ TARGET!=	uname -m
 .endif
 .if defined(MAKE_ALL_KERNELS)
 _THINNER=cat
+.elif defined(MAKE_LINT_KERNELS)
+_THINNER=grep 'LINT' || true
 .else
 _THINNER=xargs grep -L "^.NO_UNIVERSE" || true
 .endif

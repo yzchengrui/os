@@ -256,7 +256,6 @@ net_getparams(int sock)
 {
 	char buf[MAXHOSTNAMELEN];
 	n_long rootaddr, smask;
-	extern struct in_addr servip;
 
 #ifdef	SUPPORT_BOOTP
 	/*
@@ -367,8 +366,20 @@ net_print(int verbose)
 }
 
 /*
- * Strip the server's address off of the rootpath if present and return it in
- * network byte order, leaving just the pathname part in the global rootpath.
+ * Parses the rootpath if present
+ *
+ * The rootpath format can be in the form
+ * <scheme>://ip/path
+ * <scheme>:/path
+ *
+ * For compatibility with previous behaviour it also accepts as an NFS scheme
+ * ip:/path
+ * /path
+ *
+ * If an ip is set it returns it in network byte order.
+ * The default scheme defined in the global netproto, if not set it defaults to
+ * NFS.
+ * It leaves just the pathname in the global rootpath.
  */
 uint32_t
 net_parse_rootpath()
@@ -409,8 +420,8 @@ net_parse_rootpath()
 			val = strchr(ptr, '/');
 			if (val != NULL) {
 				snprintf(ip, sizeof(ip), "%.*s",
-				    (int)((uintptr_t)val - (uintptr_t)ptr), ptr);
-				printf("%s\n", ip);
+				    (int)((uintptr_t)val - (uintptr_t)ptr),
+				    ptr);
 				addr = inet_addr(ip);
 				bcopy(val, rootpath, strlen(val) + 1);
 			}
