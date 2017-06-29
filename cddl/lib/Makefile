@@ -6,6 +6,7 @@ SUBDIR=	${_drti} \
 	libavl \
 	libctf \
 	${_libdtrace} \
+	libicp \
 	libnvpair \
 	libumem \
 	libuutil \

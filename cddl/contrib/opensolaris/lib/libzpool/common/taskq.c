@@ -328,6 +328,12 @@ taskq_member(taskq_t *tq, void *t)
 }
 
 void
+taskq_cancel_id(taskq_t *tq, taskqid_t id)
+{
+	return;
+}
+
+void
 system_taskq_init(void)
 {
 	system_taskq = taskq_create("system_taskq", 64, minclsyspri, 4, 512,

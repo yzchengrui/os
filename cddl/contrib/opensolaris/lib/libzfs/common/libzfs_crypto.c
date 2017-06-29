@@ -28,6 +28,7 @@
 #include <libzfs.h>
 #include "libzfs_impl.h"
 #include "zfeature_common.h"
+#include <sys/endian.h>
 
 /*
  * User keys are used to decrypt the master encryption keys of a dataset. This

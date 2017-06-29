@@ -1229,12 +1229,18 @@ zfs_onexit_cb_data(minor_t minor, uint64_t action_handle, void **data)
 }
 
 #ifdef __FreeBSD__
-/* ARGSUSED */
-int
-zvol_create_minors(const char *name)
+void
+zvol_create_minors(const char *name __unused)
 {
-	return (0);
+	return;
 }
+
+void
+zvol_remove_minors(const char *name __unused)
+{
+	return;
+}
+
 #endif
 
 #ifdef illumos

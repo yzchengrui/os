@@ -204,8 +204,7 @@ int spa_do_crypt_mac_data(boolean_t generate, spa_t *spa, uint64_t dsobj,
     void *buf, uint_t datalen, uint8_t *mac);
 int spa_do_crypt_objset_mac_data(boolean_t generate, spa_t *spa, uint64_t dsobj,
     void *buf, uint_t datalen, boolean_t byteswap);
-int spa_do_crypt_buf(boolean_t encrypt, spa_t *spa, uint64_t dsobj,
-		     const blkptr_t *bp, uint64_t txgid, uint_t datalen, void *bufb,
-		     void *cbuf, uint8_t *iv, uint8_t *mac, uint8_t *salt, boolean_t *no_crypt);
-
+int spa_do_crypt_data(boolean_t encrypt, spa_t *spa, uint64_t dsobj,
+		      const blkptr_t *bp, uint64_t txgid, uint_t datalen, void *bufb,
+		      void *cbuf, uint8_t *iv, uint8_t *mac, uint8_t *salt, boolean_t *no_crypt);
 #endif

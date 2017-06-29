@@ -2375,7 +2375,7 @@ error:
  * the MACs on its own, unlike other functions in this file.
  */
 int
-spa_do_crypt_objset_mac_buf(boolean_t generate, spa_t *spa, uint64_t dsobj,
+spa_do_crypt_objset_mac_data(boolean_t generate, spa_t *spa, uint64_t dsobj,
     void *data, uint_t datalen, boolean_t byteswap)
 {
 	int ret;

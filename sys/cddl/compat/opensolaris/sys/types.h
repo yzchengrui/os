@@ -65,12 +65,12 @@ typedef	mode_t		o_mode_t;
 typedef	uint64_t	pgcnt_t;
 typedef	u_int		minor_t;
 
+typedef	short		index_t;
 #ifdef _KERNEL
 
 #define	B_FALSE	0
 #define	B_TRUE	1
 
-typedef	short		index_t;
 typedef	off_t		offset_t;
 typedef	long		ptrdiff_t;	/* pointer difference */
 typedef	int64_t		rlim64_t;

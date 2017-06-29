@@ -1444,6 +1444,13 @@ dmu_objset_userused_enabled(objset_t *os)
 	    DMU_USERUSED_DNODE(os) != NULL);
 }
 
+boolean_t
+dmu_objset_userobjused_enabled(objset_t *os)
+{
+        return (dmu_objset_userused_enabled(os) &&
+            spa_feature_is_enabled(os->os_spa, SPA_FEATURE_USEROBJ_ACCOUNTING));
+}
+
 typedef struct userquota_node {
 	uint64_t uqn_id;
 	int64_t uqn_delta;

@@ -505,7 +505,7 @@ zio_decrypt(zio_t *zio, void *data, uint64_t size)
 		zio_crypt_decode_mac_bp(bp, mac);
 	}
 
-	ret = spa_do_crypt_buf(B_FALSE, zio->io_spa, zio->io_bookmark.zb_objset,
+	ret = spa_do_crypt_data(B_FALSE, zio->io_spa, zio->io_bookmark.zb_objset,
 	    bp, bp->blk_birth, size, data, zio->io_data, iv, mac, salt,
 	    &no_crypt);
 
