@@ -113,6 +113,9 @@ struct device {
 	unsigned int	msix;
 	unsigned int	msix_max;
 	const struct attribute_group **groups;
+
+	spinlock_t	devres_lock;
+	struct list_head devres_head;
 };
 
 extern struct device linux_root_device;
@@ -142,7 +145,13 @@ struct device_attribute {
 
 #define	DEVICE_ATTR(_name, _mode, _show, _store)			\
 	struct device_attribute dev_attr_##_name =			\
-	    { { #_name, NULL, _mode }, _show, _store }
+	    __ATTR(_name, _mode, _show, _store)
+#define	DEVICE_ATTR_RO(_name)						\
+	struct device_attribute dev_attr_##_name = __ATTR_RO(_name)
+#define	DEVICE_ATTR_WO(_name)						\
+	struct device_attribute dev_attr_##_name = __ATTR_WO(_name)
+#define	DEVICE_ATTR_RW(_name)						\
+	struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
 
 /* Simple class attribute that is just a static string */
 struct class_attribute_string {
@@ -284,6 +293,9 @@ device_initialize(struct device *dev)
 	dev->bsddev = bsddev;
 	MPASS(dev->bsddev != NULL);
 	kobject_init(&dev->kobj, &linux_dev_ktype);
+
+	spin_lock_init(&dev->devres_lock);
+	INIT_LIST_HEAD(&dev->devres_head);
 }
 
 static inline int
