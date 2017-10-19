@@ -911,7 +911,7 @@ dbuf_read_done(zio_t *zio, const zbookmark_phys_t *zb, const blkptr_t *bp,
 		/* we were freed in flight; disregard any error */
 		if (buf == NULL) {
 			buf = arc_alloc_buf(db->db_objset->os_spa,
-			     db, DBUF_GET_BUFC_TYPE(db), db->db.db_size);
+			    db, DBUF_GET_BUFC_TYPE(db), db->db.db_size);
 		}
 		arc_release(buf, db);
 		bzero(buf->b_data, db->db.db_size);
