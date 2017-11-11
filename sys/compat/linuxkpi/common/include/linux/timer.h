@@ -63,8 +63,8 @@ do {									\
 extern void mod_timer(struct timer_list *, unsigned long);
 extern void add_timer(struct timer_list *);
 
-#define	del_timer(timer)	callout_stop(&(timer)->timer_callout)
-#define	del_timer_sync(timer)	callout_drain(&(timer)->timer_callout)
+#define	del_timer(timer)	(void)callout_stop(&(timer)->timer_callout)
+#define	del_timer_sync(timer)	(void)callout_drain(&(timer)->timer_callout)
 #define	timer_pending(timer)	callout_pending(&(timer)->timer_callout)
 #define	round_jiffies(j) \
 	((unsigned long)(((j) + linux_timer_hz_mask) & ~linux_timer_hz_mask))
