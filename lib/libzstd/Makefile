@@ -26,7 +26,7 @@ CFLAGS+=	-I${ZSTDDIR}/lib -I${ZSTDDIR}/lib/common -DXXH_NAMESPACE=ZSTD_
 
 PRIVATELIB=	yes
 
-ZSTDDIR=	${SRCTOP}/contrib/zstd
+ZSTDDIR=	${SRCTOP}/sys/contrib/zstd
 .PATH:	${ZSTDDIR}/lib/common ${ZSTDDIR}/lib/compress \
 	${ZSTDDIR}/lib/decompress ${ZSTDDIR}/lib/deprecated \
 	${ZSTDDIR}/lib/dictBuilder ${ZSTDDIR}/lib
