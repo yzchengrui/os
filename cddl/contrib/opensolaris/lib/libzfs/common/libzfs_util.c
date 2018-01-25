@@ -254,6 +254,8 @@ libzfs_error_description(libzfs_handle_t *hdl)
 		return (dgettext(TEXT_DOMAIN, "device removal in progress"));
 	case EZFS_VDEV_TOO_BIG:
 		return (dgettext(TEXT_DOMAIN, "device exceeds supported size"));
+	case EZFS_CRYPTOFAILED:
+		return (dgettext(TEXT_DOMAIN, "encryption failure"));
 	case EZFS_UNKNOWN:
 		return (dgettext(TEXT_DOMAIN, "unknown error"));
 	default:
