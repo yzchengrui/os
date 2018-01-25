@@ -144,6 +144,10 @@ typedef enum dmu_object_byteswap {
 	((ot) & DMU_OT_ENCRYPTED) : \
 	dmu_ot[(int)(ot)].ot_encrypt)
 
+#define	DMU_OT_IS_ENCRYPTED(ot) (((ot) & DMU_OT_NEWTYPE) ? \
+	((ot) & DMU_OT_ENCRYPTED) : \
+	dmu_ot[(int)(ot)].ot_encrypt)
+
 /*
  * These object types use bp_fill != 1 for their L0 bp's. Therefore they can't
  * have their data embedded (i.e. use a BP_IS_EMBEDDED() bp), because bp_fill

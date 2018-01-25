@@ -188,12 +188,15 @@
 unsigned long zfs_key_max_salt_uses = ZFS_KEY_MAX_SALT_USES_DEFAULT;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /*
  * Set to a nonzero value to cause zio_do_crypt_uio() to fail 1/this many
  * calls, to test decryption error handling code paths.
  */
 uint64_t zio_decrypt_fail_fraction = 0;
 
+=======
+>>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 =======
 >>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 typedef struct blkptr_auth_buf {
@@ -469,6 +472,7 @@ zio_do_crypt_uio(boolean_t encrypt, uint64_t crypt, crypto_key_t *key,
 		}
 	} else {
 <<<<<<< HEAD
+<<<<<<< HEAD
 		if (zio_decrypt_fail_fraction != 0 &&
 		    spa_get_random(zio_decrypt_fail_fraction) == 0) {
 			ret = CRYPTO_INVALID_MAC;
@@ -476,6 +480,10 @@ zio_do_crypt_uio(boolean_t encrypt, uint64_t crypt, crypto_key_t *key,
 			ret = crypto_decrypt(&mech, &cipherdata,
 			    key, tmpl, &plaindata, NULL);
 		}
+=======
+		ret = crypto_decrypt(&mech, &cipherdata, key, tmpl, &plaindata,
+		    NULL);
+>>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 =======
 		ret = crypto_decrypt(&mech, &cipherdata, key, tmpl, &plaindata,
 		    NULL);
@@ -1223,9 +1231,14 @@ zio_crypt_do_objset_hmacs(zio_crypt_key_t *key, void *data, uint_t datalen,
 	 * objects are not present, the local MAC is zeroed out.
 	 */
 <<<<<<< HEAD
+<<<<<<< HEAD
 	if ((osp->os_userused_dnode.dn_type == DMU_OT_NONE &&
 	    osp->os_groupused_dnode.dn_type == DMU_OT_NONE) ||
 	    (datalen <= OBJSET_OLD_PHYS_SIZE)) {
+=======
+	if (osp->os_userused_dnode.dn_type == DMU_OT_NONE &&
+	    osp->os_groupused_dnode.dn_type == DMU_OT_NONE) {
+>>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 =======
 	if (osp->os_userused_dnode.dn_type == DMU_OT_NONE &&
 	    osp->os_groupused_dnode.dn_type == DMU_OT_NONE) {
