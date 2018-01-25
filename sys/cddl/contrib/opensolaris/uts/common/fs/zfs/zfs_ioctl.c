@@ -33,7 +33,6 @@
  * Copyright (c) 2014 Integros [integros.com]
  * Copyright 2016 Toomas Soome <tsoome@me.com>
  * Copyright 2017 RackTop Systems.
- * Copyright 2016 Toomas Soome <tsoome@me.com>
  * Copyright (c) 2017, Datto, Inc. All rights reserved.
  */
 

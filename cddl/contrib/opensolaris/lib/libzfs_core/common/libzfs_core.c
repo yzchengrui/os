@@ -1228,3 +1228,66 @@ lzc_change_key(const char *fsname, uint64_t crypt_cmd, nvlist_t *props,
 	nvlist_free(ioc_args);
 	return (error);
 }
+
+/*
+ * Performs key management functions
+ *
+ * crypto_cmd should be a value from zfs_ioc_crypto_cmd_t. If the command
+ * specifies to load or change a wrapping key, the key should be specified in
+ * the hidden_args nvlist so that it is not logged
+ */
+int
+lzc_load_key(const char *fsname, boolean_t noop, uint8_t *wkeydata,
+    uint_t wkeylen)
+{
+	int error;
+	nvlist_t *ioc_args;
+	nvlist_t *hidden_args;
+
+	if (wkeydata == NULL)
+		return (EINVAL);
+
+	ioc_args = fnvlist_alloc();
+	hidden_args = fnvlist_alloc();
+	fnvlist_add_uint8_array(hidden_args, "wkeydata", wkeydata, wkeylen);
+	fnvlist_add_nvlist(ioc_args, ZPOOL_HIDDEN_ARGS, hidden_args);
+	if (noop)
+		fnvlist_add_boolean(ioc_args, "noop");
+	error = lzc_ioctl(ZFS_IOC_LOAD_KEY, fsname, ioc_args, NULL);
+	nvlist_free(hidden_args);
+	nvlist_free(ioc_args);
+
+	return (error);
+}
+
+int
+lzc_unload_key(const char *fsname)
+{
+	return (lzc_ioctl(ZFS_IOC_UNLOAD_KEY, fsname, NULL, NULL));
+}
+
+int
+lzc_change_key(const char *fsname, uint64_t crypt_cmd, nvlist_t *props,
+    uint8_t *wkeydata, uint_t wkeylen)
+{
+	int error;
+	nvlist_t *ioc_args = fnvlist_alloc();
+	nvlist_t *hidden_args = NULL;
+
+	fnvlist_add_uint64(ioc_args, "crypt_cmd", crypt_cmd);
+
+	if (wkeydata != NULL) {
+		hidden_args = fnvlist_alloc();
+		fnvlist_add_uint8_array(hidden_args, "wkeydata", wkeydata,
+		    wkeylen);
+		fnvlist_add_nvlist(ioc_args, ZPOOL_HIDDEN_ARGS, hidden_args);
+	}
+
+	if (props != NULL)
+		fnvlist_add_nvlist(ioc_args, "props", props);
+
+	error = lzc_ioctl(ZFS_IOC_CHANGE_KEY, fsname, ioc_args, NULL);
+	nvlist_free(hidden_args);
+	nvlist_free(ioc_args);
+	return (error);
+}

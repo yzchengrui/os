@@ -673,7 +673,8 @@ _NOTE(CONSTCOND) } while (0)
  * 'func' is either snprintf() or mdb_snprintf().
  * 'ws' (whitespace) can be ' ' for single-line format, '\n' for multi-line.
  */
-#define	SNPRINTF_BLKPTR(func, ws, buf, size, bp, type, checksum, compress) \
+#define	SNPRINTF_BLKPTR(func, ws, buf, size, bp, type, checksum, crypt_type, \
+	compress) \
 {									\
 	static const char *copyname[] =					\
 	    { "zero", "single", "double", "triple" };			\
