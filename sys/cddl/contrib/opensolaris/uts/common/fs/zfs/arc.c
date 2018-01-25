@@ -4105,6 +4105,74 @@ arc_hdr_realloc_crypt(arc_buf_hdr_t *hdr, boolean_t need_crypt)
 }
 
 /*
+ * This function allows an L1 header to be reallocated as a crypt
+ * header and vice versa. If we are going to a crypt header, the
+ * new fields will be zeroed out.
+ */
+static arc_buf_hdr_t *
+arc_hdr_realloc_crypt(arc_buf_hdr_t *hdr, boolean_t need_crypt)
+{
+	arc_buf_hdr_t *nhdr;
+	arc_buf_t *buf;
+	kmem_cache_t *ncache, *ocache;
+
+	ASSERT(HDR_HAS_L1HDR(hdr));
+	ASSERT3U(!!HDR_PROTECTED(hdr), !=, need_crypt);
+	ASSERT3P(hdr->b_l1hdr.b_state, ==, arc_anon);
+	ASSERT(!multilist_link_active(&hdr->b_l1hdr.b_arc_node));
+
+	if (need_crypt) {
+		ncache = hdr_full_crypt_cache;
+		ocache = hdr_full_cache;
+	} else {
+		ncache = hdr_full_cache;
+		ocache = hdr_full_crypt_cache;
+	}
+
+	nhdr = kmem_cache_alloc(ncache, KM_PUSHPAGE);
+	bcopy(hdr, nhdr, HDR_L2ONLY_SIZE);
+	nhdr->b_l1hdr.b_freeze_cksum = hdr->b_l1hdr.b_freeze_cksum;
+	nhdr->b_l1hdr.b_bufcnt = hdr->b_l1hdr.b_bufcnt;
+	nhdr->b_l1hdr.b_byteswap = hdr->b_l1hdr.b_byteswap;
+	nhdr->b_l1hdr.b_state = hdr->b_l1hdr.b_state;
+	nhdr->b_l1hdr.b_arc_access = hdr->b_l1hdr.b_arc_access;
+	nhdr->b_l1hdr.b_acb = hdr->b_l1hdr.b_acb;
+	nhdr->b_l1hdr.b_pabd = hdr->b_l1hdr.b_pabd;
+	nhdr->b_l1hdr.b_buf = hdr->b_l1hdr.b_buf;
+#ifdef ZFS_DEBUG
+	if (hdr->b_l1hdr.b_thawed != NULL) {
+		nhdr->b_l1hdr.b_thawed = hdr->b_l1hdr.b_thawed;
+		hdr->b_l1hdr.b_thawed = NULL;
+	}
+#endif
+
+	/*
+	 * This refcount_add() exists only to ensure that the individual
+	 * arc buffers always point to a header that is referenced, avoiding
+	 * a small race condition that could trigger ASSERTs.
+	 */
+	(void) refcount_add(&nhdr->b_l1hdr.b_refcnt, FTAG);
+
+	for (buf = nhdr->b_l1hdr.b_buf; buf != NULL; buf = buf->b_next) {
+		mutex_enter(&buf->b_evict_lock);
+		buf->b_hdr = nhdr;
+		mutex_exit(&buf->b_evict_lock);
+	}
+	refcount_transfer(&nhdr->b_l1hdr.b_refcnt, &hdr->b_l1hdr.b_refcnt);
+	(void) refcount_remove(&nhdr->b_l1hdr.b_refcnt, FTAG);
+
+	if (need_crypt) {
+		arc_hdr_set_flags(nhdr, ARC_FLAG_PROTECTED);
+	} else {
+		arc_hdr_clear_flags(nhdr, ARC_FLAG_PROTECTED);
+	}
+	buf_discard_identity(hdr);
+	kmem_cache_free(ocache, hdr);
+
+	return (nhdr);
+}
+
+/*
  * This function is used by the send / receive code to convert a newly
  * allocated arc_buf_t to one that is suitable for a raw encrypted write. It
  * is also used to allow the root objset block to be uupdated without altering
