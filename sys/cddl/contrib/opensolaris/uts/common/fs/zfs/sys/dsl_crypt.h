@@ -190,12 +190,17 @@ int spa_keystore_lookup_key(spa_t *spa, uint64_t dsobj, void *tag,
 
 int dsl_crypto_populate_key_nvlist(struct dsl_dataset *ds, nvlist_t **nvl_out);
 <<<<<<< HEAD
+<<<<<<< HEAD
 int dsl_crypto_recv_raw_key_check(struct dsl_dataset *ds,
     nvlist_t *nvl, dmu_tx_t *tx);
 void dsl_crypto_recv_raw_key_sync(struct dsl_dataset *ds,
     nvlist_t *nvl, dmu_tx_t *tx);
 int dsl_crypto_recv_raw(const char *poolname, uint64_t dsobj,
     dmu_objset_type_t ostype, nvlist_t *nvl, boolean_t do_key);
+=======
+int dsl_crypto_recv_key(const char *poolname, uint64_t dsobj,
+    dmu_objset_type_t ostype, nvlist_t *nvl);
+>>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 =======
 int dsl_crypto_recv_key(const char *poolname, uint64_t dsobj,
     dmu_objset_type_t ostype, nvlist_t *nvl);

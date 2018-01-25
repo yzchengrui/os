@@ -2601,7 +2601,6 @@ dmu_write_policy(objset_t *os, dnode_t *dn, int level, int wp, zio_prop_t *zp)
 	if (os->os_encrypted && (wp & WP_NOFILL) == 0) {
 		encrypt = B_TRUE;
 
-
 		if (DMU_OT_IS_ENCRYPTED(type)) {
 			copies = MIN(copies, SPA_DVAS_PER_BP - 1);
 			nopwrite = B_FALSE;
