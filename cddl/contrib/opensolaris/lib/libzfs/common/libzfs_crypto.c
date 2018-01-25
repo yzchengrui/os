@@ -488,6 +488,7 @@ pbkdf2(uint8_t *passphrase, size_t passphraselen, uint8_t *salt,
 {
 	int ret = 0;
 <<<<<<< HEAD
+<<<<<<< HEAD
 #ifdef __FreeBSD__
 	ret = PKCS5_PBKDF2_HMAC_SHA1((char *)passphrase, passphraselen,
 	    salt, saltlen, iterations,
@@ -499,6 +500,8 @@ pbkdf2(uint8_t *passphrase, size_t passphraselen, uint8_t *salt,
 	 */
 	ret = !ret;
 #else
+=======
+>>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 =======
 >>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 	CK_SESSION_HANDLE session;
@@ -539,7 +542,10 @@ pbkdf2(uint8_t *passphrase, size_t passphraselen, uint8_t *salt,
 	(void) memset(tmpkeydata, 0, tmpkeydatalen);
 	free(tmpkeydata);
 <<<<<<< HEAD
+<<<<<<< HEAD
 #endif /* __FreeBSD__ */
+=======
+>>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 =======
 >>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
