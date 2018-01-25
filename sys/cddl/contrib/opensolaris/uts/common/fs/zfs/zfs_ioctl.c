@@ -35,7 +35,6 @@
  * Copyright 2017 RackTop Systems.
  * Copyright 2016 Toomas Soome <tsoome@me.com>
  * Copyright (c) 2017, Datto, Inc. All rights reserved.
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
  */
 
 /*
