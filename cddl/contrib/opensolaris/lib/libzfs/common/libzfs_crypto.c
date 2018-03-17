@@ -436,6 +436,17 @@ pbkdf2(uint8_t *passphrase, size_t passphraselen, uint8_t *salt,
     size_t outputlen)
 {
 	int ret = 0;
+#ifdef __FreeBSD__
+	ret = PKCS5_PBKDF2_HMAC_SHA1((char *)passphrase, passphraselen,
+	    salt, saltlen, iterations,
+	    outputlen, output);
+	/*
+	 * PKCS5_PBKDF2_HMAC_SHA1 returns 1 on success, but 0 on error,
+	 * while our calling function expects 0 on success and non-zero
+	 * on error.  So we just toggle it.
+	 */
+	ret = !ret;
+#else
 	CK_SESSION_HANDLE session;
 	char *tmpkeydata = NULL;
 	size_t tmpkeydatalen = 0;
@@ -473,6 +484,7 @@ pbkdf2(uint8_t *passphrase, size_t passphraselen, uint8_t *salt,
 	(void) memcpy(output, tmpkeydata, tmpkeydatalen);
 	(void) memset(tmpkeydata, 0, tmpkeydatalen);
 	free(tmpkeydata);
+#endif /* __FreeBSD__ */
 
 	return (ret);
 }
