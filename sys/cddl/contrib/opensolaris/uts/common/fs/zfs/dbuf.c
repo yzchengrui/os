@@ -894,8 +894,8 @@ dbuf_whichblock(dnode_t *dn, int64_t level, uint64_t offset)
 }
 
 static void
-dbuf_read_done(zio_t *zio, const zbookmark_phys_t *zb, int err, const blkptr_t *bp,
-    arc_buf_t *buf, void *vdb)
+dbuf_read_done(zio_t *zio, const zbookmark_phys_t *zb, int err,
+    const blkptr_t *bp, arc_buf_t *buf, void *vdb)
 {
 	dmu_buf_impl_t *db = vdb;
 
