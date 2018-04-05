@@ -15,6 +15,7 @@ DIRDEPS = \
 	lib/libc \
 	lib/libcompiler_rt \
 	lib/libexpat \
+	lib/libfetch \
 	lib/libgeom \
 	lib/libmd \
 	lib/libthr \

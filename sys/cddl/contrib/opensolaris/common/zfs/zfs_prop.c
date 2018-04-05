@@ -47,6 +47,10 @@
 #include <ctype.h>
 #endif
 
+#if defined(__FreeBSD__) && !defined(_KERNEL)
+# include <fetch.h>
+#endif
+
 static zprop_desc_t zfs_prop_table[ZFS_NUM_PROPS];
 
 /* Note this is indexed by zfs_userquota_prop_t, keep the order the same */
@@ -735,9 +739,26 @@ zfs_prop_valid_keylocation(const char *str, boolean_t encrypted)
 		return (!encrypted);
 	else if (strcmp("prompt", str) == 0)
 		return (B_TRUE);
+#ifdef __FreeBSD__
+	else if (strlen(str) > 0) {
+# ifdef _KERNEL
+		/* The kernel can't parse a URL */
+		return (B_TRUE);
+# else
+		struct url *url;
+		url = fetchParseURL(str);
+		if (url == NULL)
+			return (B_FALSE);
+		else {
+			fetchFreeURL(url);
+			return (B_TRUE);
+		}
+# endif
+	}
+#else
 	else if (strlen(str) > 8 && strncmp("file:///", str, 8) == 0)
 		return (B_TRUE);
-
+#endif
 	return (B_FALSE);
 }
 

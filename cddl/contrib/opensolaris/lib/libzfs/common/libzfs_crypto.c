@@ -39,6 +39,10 @@
 #include "libzfs_impl.h"
 #include "zfeature_common.h"
 
+#ifdef __FreeBSD__
+# include <fetch.h>
+#endif
+
 /*
  * User keys are used to decrypt the master encryption keys of a dataset. This
  * indirection allows a user to change his / her access key without having to
@@ -75,10 +79,20 @@ static int caught_interrupt;
 static zfs_keylocation_t
 zfs_prop_parse_keylocation(const char *str)
 {
+#ifdef __FreeBSD__
+	struct url *key_url = NULL;
+#endif
 	if (strcmp("prompt", str) == 0)
 		return (ZFS_KEYLOCATION_PROMPT);
+#ifdef __FreeBSD__
+	else if ((key_url = fetchParseURL(str)) != NULL) {
+		fetchFreeURL(key_url);
+		return (ZFS_KEYLOCATION_URI);
+	}
+#else
 	else if (strlen(str) > 8 && strncmp("file:///", str, 8) == 0)
 		return (ZFS_KEYLOCATION_URI);
+#endif
 
 	return (ZFS_KEYLOCATION_NONE);
 }
@@ -288,7 +302,11 @@ get_key_material(libzfs_handle_t *hdl, boolean_t do_verify, boolean_t newkey,
 		}
 		break;
 	case ZFS_KEYLOCATION_URI:
+#ifdef __FreeBSD__
+		fd = fetchGetURL(keylocation, NULL);
+#else
 		fd = fopen(&keylocation[7], "r");
+#endif
 		if (!fd) {
 			ret = errno;
 			errno = 0;
