@@ -63,7 +63,7 @@ CFLAGS+=	-I${SRCTOP}/lib/libpthread/thread
 CFLAGS+=	-I${SRCTOP}/lib/libpthread/sys
 CFLAGS+=	-I${SRCTOP}/lib/libthr/arch/${MACHINE_CPUARCH}/include
 
-LIBADD=		md pthread z nvpair avl umem
+LIBADD=		md pthread z nvpair avl umem crypto
 
 # atomic.S doesn't like profiling.
 MK_PROFILE=	no
