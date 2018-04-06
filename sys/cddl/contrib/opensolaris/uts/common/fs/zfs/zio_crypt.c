@@ -210,18 +210,12 @@ typedef SHA512_CTX SHA2_CTX;
 	(MIN(zfs_key_max_salt_uses, ZFS_KEY_MAX_SALT_USES_DEFAULT))
 unsigned long zfs_key_max_salt_uses = ZFS_KEY_MAX_SALT_USES_DEFAULT;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 /*
  * Set to a nonzero value to cause zio_do_crypt_uio() to fail 1/this many
  * calls, to test decryption error handling code paths.
  */
 uint64_t zio_decrypt_fail_fraction = 0;
 
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 typedef struct blkptr_auth_buf {
 	uint64_t bab_prop;			/* blk_prop - portable mask */
 	uint8_t bab_mac[ZIO_DATA_MAC_LEN];	/* MAC from blk_cksum */
@@ -278,21 +272,37 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	bzero(key, sizeof (zio_crypt_key_t));
 
 	/* fill keydata buffers and salt with random data */
+#ifdef __FreeBSD__
+	random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
+#else
 	ret = random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
 	if (ret != 0)
 		goto error;
+#endif
 
+#ifdef __FreeBSD__
+	random_get_bytes(key->zk_master_keydata, keydata_len);
+#else
 	ret = random_get_bytes(key->zk_master_keydata, keydata_len);
 	if (ret != 0)
 		goto error;
+#endif
 
+#ifdef __FreeBSD__
+	random_get_bytes(key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
+#else
 	ret = random_get_bytes(key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
 	if (ret != 0)
 		goto error;
+#endif
 
+#ifdef __FreeBSD__
+	random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
+#else
 	ret = random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
+#endif
 
 	/* derive the current key from the master key */
 	ret = hkdf_sha512(key->zk_master_keydata, keydata_len, NULL, 0,
@@ -360,9 +370,13 @@ zio_crypt_key_change_salt(zio_crypt_key_t *key)
 	uint_t keydata_len = zio_crypt_table[key->zk_crypt].ci_keylen;
 
 	/* generate a new salt */
+#ifdef __FreeBSD__
+	random_get_bytes(salt, ZIO_DATA_SALT_LEN);
+#else
 	ret = random_get_bytes(salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
+#endif
 
 	rw_enter(&key->zk_salt_lock, RW_WRITER);
 
@@ -567,8 +581,6 @@ zio_do_crypt_uio(boolean_t encrypt, uint64_t crypt, crypto_key_t *key,
 			goto error;
 		}
 	} else {
-<<<<<<< HEAD
-<<<<<<< HEAD
 		if (zio_decrypt_fail_fraction != 0 &&
 		    spa_get_random(zio_decrypt_fail_fraction) == 0) {
 			ret = CRYPTO_INVALID_MAC;
@@ -576,14 +588,6 @@ zio_do_crypt_uio(boolean_t encrypt, uint64_t crypt, crypto_key_t *key,
 			ret = crypto_decrypt(&mech, &cipherdata,
 			    key, tmpl, &plaindata, NULL);
 		}
-=======
-		ret = crypto_decrypt(&mech, &cipherdata, key, tmpl, &plaindata,
-		    NULL);
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
-		ret = crypto_decrypt(&mech, &cipherdata, key, tmpl, &plaindata,
-		    NULL);
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 		if (ret != CRYPTO_SUCCESS) {
 			ASSERT3U(ret, ==, CRYPTO_INVALID_MAC);
 			ret = SET_ERROR(ECKSUM);
@@ -624,10 +628,14 @@ zio_crypt_key_wrap(crypto_key_t *cwkey, zio_crypt_key_t *key, uint8_t *iv,
 	keydata_len = zio_crypt_table[crypt].ci_keylen;
 
 	/* generate iv for wrapping the master and hmac key */
+#ifdef __FreeBSD__
+	random_get_pseudo_bytes(iv, WRAPPING_IV_LEN);
+#else
 	ret = random_get_pseudo_bytes(iv, WRAPPING_IV_LEN);
 	
 	if (ret != 0)
 		goto error;
+#endif
 
 #ifdef __FreeBSD__
 	/*
@@ -814,9 +822,13 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 		goto error;
 
 	/* generate a fresh salt */
+#ifdef __FreeBSD__
+	random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
+#else
 	ret = random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
+#endif
 
 	/* derive the current key from the master key */
 	ret = hkdf_sha512(key->zk_master_keydata, keydata_len, NULL, 0,
@@ -876,9 +888,13 @@ zio_crypt_generate_iv(uint8_t *ivbuf)
 	int ret;
 
 	/* randomly generate the IV */
+#ifdef __FreeBSD__
+	random_get_pseudo_bytes(ivbuf, ZIO_DATA_IV_LEN);
+#else
 	ret = random_get_pseudo_bytes(ivbuf, ZIO_DATA_IV_LEN);
 	if (ret != 0)
 		goto error;
+#endif
 
 	return (0);
 
@@ -1466,19 +1482,9 @@ zio_crypt_do_objset_hmacs(zio_crypt_key_t *key, void *data, uint_t datalen,
 	 * The local MAC protects the user and group accounting. If these
 	 * objects are not present, the local MAC is zeroed out.
 	 */
-<<<<<<< HEAD
-<<<<<<< HEAD
 	if ((osp->os_userused_dnode.dn_type == DMU_OT_NONE &&
 	    osp->os_groupused_dnode.dn_type == DMU_OT_NONE) ||
 	    (datalen <= OBJSET_OLD_PHYS_SIZE)) {
-=======
-	if (osp->os_userused_dnode.dn_type == DMU_OT_NONE &&
-	    osp->os_groupused_dnode.dn_type == DMU_OT_NONE) {
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
-	if (osp->os_userused_dnode.dn_type == DMU_OT_NONE &&
-	    osp->os_groupused_dnode.dn_type == DMU_OT_NONE) {
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 		bzero(local_mac, ZIO_OBJSET_MAC_LEN);
 		return (0);
 	}
