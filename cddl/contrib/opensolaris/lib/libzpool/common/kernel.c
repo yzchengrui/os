@@ -879,6 +879,7 @@ highbit64(uint64_t i)
 }
 #endif
 
+#ifndef __FreeBSD__
 static int random_fd = -1, urandom_fd = -1;
 
 static int
@@ -910,6 +911,7 @@ random_get_pseudo_bytes(uint8_t *ptr, size_t len)
 {
 	return (random_get_bytes_common(ptr, len, urandom_fd));
 }
+#endif
 
 int
 ddi_strtoul(const char *hw_serial, char **nptr, int base, unsigned long *result)
@@ -985,8 +987,10 @@ kernel_init(int mode)
 	(void) snprintf(hw_serial, sizeof (hw_serial), "%lu",
 	    (mode & FWRITE) ? (unsigned long)gethostid() : 0);
 
+#ifndef __FreeBSD__
 	VERIFY((random_fd = open("/dev/random", O_RDONLY)) != -1);
 	VERIFY((urandom_fd = open("/dev/urandom", O_RDONLY)) != -1);
+#endif
 
 	system_taskq_init();
 
@@ -1006,11 +1010,13 @@ kernel_fini(void)
 
 	system_taskq_fini();
 
+#ifndef __FreeBSD__
 	close(random_fd);
 	close(urandom_fd);
 
 	random_fd = -1;
 	urandom_fd = -1;
+#endif
 }
 
 /* ARGSUSED */

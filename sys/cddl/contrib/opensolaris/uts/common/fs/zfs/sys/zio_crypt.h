@@ -22,7 +22,11 @@
 
 #include <sys/dmu.h>
 #include <sys/refcount.h>
-#include <sys/crypto/api.h>
+#ifdef __FreeBSD__
+# include <sys/freebsd_crypto.h>
+#else
+# include <sys/crypto/api.h>
+#endif /* __FreeBSD__ */
 #include <sys/nvpair.h>
 #include <sys/avl.h>
 #include <sys/zio.h>
@@ -51,8 +55,15 @@ typedef enum zio_crypt_type {
 /* table of supported crypto algorithms, modes and keylengths. */
 typedef struct zio_crypt_info {
 	/* mechanism name, needed by ICP */
+#ifdef __FreeBSD__
+	/*
+	 * I've deliberately used a different name here, to catch
+	 * ICP-using code.
+	 */
+	const char	*ci_algname;
+#else
 	crypto_mech_name_t ci_mechname;
-
+#endif
 	/* cipher mode type (GCM, CCM) */
 	zio_crypt_type_t ci_crypt_type;
 
@@ -94,14 +105,18 @@ typedef struct zio_crypt_key {
 	/* illumos crypto api current encryption key */
 	crypto_key_t zk_current_key;
 
+#ifndef __FreeBSD__
 	/* template of current encryption key for illumos crypto api */
 	crypto_ctx_template_t zk_current_tmpl;
+#endif
 
 	/* illumos crypto api current hmac key */
 	crypto_key_t zk_hmac_key;
 
+#ifndef __FreeBSD__
 	/* template of hmac key for illumos crypto api */
 	crypto_ctx_template_t zk_hmac_tmpl;
+#endif
 
 	/* lock for changing the salt and dependant values */
 	krwlock_t zk_salt_lock;

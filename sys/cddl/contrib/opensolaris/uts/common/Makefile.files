@@ -96,6 +96,7 @@ ZFS_COMMON_OBJS +=		\
 	dsl_deleg.o		\
 	dsl_prop.o		\
 	dsl_scan.o		\
+	freebsd_crypto.o	\
 	zfeature.o		\
 	gzip.o			\
 	hkdf.o			\
