@@ -453,13 +453,21 @@ zio_do_crypt_uio_opencrypto(boolean_t encrypt, uint64_t crypt,
     uio_t *uio, uint_t auth_len)
 {
 	zio_crypt_info_t *ci;
+	int ret;
 
 	ci = &zio_crypt_table[crypt];
 	if (ci->ci_crypt_type != ZC_TYPE_GCM)
 		return (ENOTSUP);
 
-	return freebsd_crypt_uio(encrypt, ci, uio, key, ivbuf,
-				 datalen, auth_len);
+
+	ret = freebsd_crypt_uio(encrypt, ci, uio, key, ivbuf,
+				datalen, auth_len);
+	if (ret != 0) {
+		printf("%s(%d):  Returning error %s\n", __FUNCTION__, __LINE__, encrypt ? "EIO" : "ECKSUM");
+		ret = SET_ERROR(encrypt ? EIO : ECKSUM);
+	}
+
+	return (ret);
 }
 #else
 /* ARGSUSED */
@@ -1568,9 +1576,10 @@ zio_crypt_do_indirect_mac_checksum_impl(boolean_t generate, void *buf,
 		return (0);
 	}
 
-	if (bcmp(digestbuf, cksum, ZIO_DATA_MAC_LEN) != 0)
+	if (bcmp(digestbuf, cksum, ZIO_DATA_MAC_LEN) != 0) {
+		printf("%s(%d): Setting ECKSUM\n", __FUNCTION__, __LINE__);
 		return (SET_ERROR(ECKSUM));
-
+	}
 	return (0);
 }
 
@@ -1827,7 +1836,7 @@ zio_crypt_init_uios_zil(boolean_t encrypt, uint8_t *plainbuf,
 	dst_iovecs[0].iov_len = aad_len;
 
 	out_uio->uio_iov = dst_iovecs;
-	out_uio->uio_iovcnt = nr_iovecs;
+	out_uio->uio_iovcnt = nr_dst;
 #else
 
 
@@ -2047,7 +2056,7 @@ zio_crypt_init_uios_dnode(boolean_t encrypt, uint64_t version,
 	dst_iovecs[0].iov_base = aadbuf;
 	dst_iovecs[0].iov_len = aad_len;
 	out_uio->uio_iov = dst_iovecs;
-	out_uio->uio_iovcnt = nr_iovecs;
+	out_uio->uio_iovcnt = nr_dst;
 #else
 	if (encrypt) {
 		puio->uio_iov = src_iovecs;
