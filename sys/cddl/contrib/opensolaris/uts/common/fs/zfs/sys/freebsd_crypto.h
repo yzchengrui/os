@@ -40,6 +40,7 @@
 #  include <sha256.h>
 #  include <sha512.h>
 # endif
+
 # define	SUN_CKM_AES_CCM	"CKM_AES_CCM"
 # define	SUN_CKM_AES_GCM	"CKM_AES_GCM"
 # define	SUN_CKM_SHA512_HMAC	"CKM_SHA512_HMAC"
@@ -48,6 +49,8 @@
 
 #define CRYPTO_BITS2BYTES(n) ((n) == 0 ? 0 : (((n) - 1) >> 3) + 1)
 #define CRYPTO_BYTES2BITS(n) ((n) << 3)
+
+struct zio_crypt_info;
 
 /*
  * Unused types to minimize code differences.
@@ -78,5 +81,8 @@ void crypto_mac(const crypto_key_t *key, const void *in_data, size_t in_data_siz
 void crypto_mac_init(struct hmac_ctx *ctx, const crypto_key_t *key);
 void crypto_mac_update(struct hmac_ctx *ctx, const void *data, size_t data_size);
 void crypto_mac_final(struct hmac_ctx *ctx, void *out_data, size_t out_data_size);
+
+int freebsd_crypt_uio(boolean_t, struct zio_crypt_info *, uio_t *,
+					  crypto_key_t *, uint8_t *, size_t, size_t);
 
 #endif /* _ZFS_FREEBSD_CRYPTO_H */
