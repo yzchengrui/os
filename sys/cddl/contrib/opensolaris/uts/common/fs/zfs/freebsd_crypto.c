@@ -201,11 +201,12 @@ freebsd_crypt_uio(boolean_t encrypt,
 		crypto_freesession(sid);
 		goto bad;
 	}
+
 	auth_desc = crp->crp_desc;
 	enc_desc = auth_desc->crd_next;
 
 	crp->crp_sid = sid;
-	crp->crp_ilen = auth_len + datalen + ZIO_DATA_MAC_LEN;
+	crp->crp_ilen = auth_len + datalen;
 	crp->crp_buf = (void*)data_uio;
 	crp->crp_flags = CRYPTO_F_IOV | CRYPTO_F_CBIFSYNC;
 	
@@ -215,7 +216,7 @@ freebsd_crypt_uio(boolean_t encrypt,
 	auth_desc->crd_alg = xauth->type;
 	auth_desc->crd_key = cri.cri_key;
 	auth_desc->crd_klen = cri.cri_klen;
-	
+
 	printf("%s: auth: skip = %u, len = %u, inject = %u\n", __FUNCTION__, auth_desc->crd_skip, auth_desc->crd_len, auth_desc->crd_inject);
 	
 	enc_desc->crd_skip = auth_len;
