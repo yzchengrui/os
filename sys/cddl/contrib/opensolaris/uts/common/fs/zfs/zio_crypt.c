@@ -47,6 +47,7 @@
 
 typedef SHA512_CTX SHA2_CTX;
 
+# undef FCRYPTO_DEBUG
 #endif
 
 /*
@@ -463,7 +464,9 @@ zio_do_crypt_uio_opencrypto(boolean_t encrypt, uint64_t crypt,
 	ret = freebsd_crypt_uio(encrypt, ci, uio, key, ivbuf,
 				datalen, auth_len);
 	if (ret != 0) {
+#ifdef FCRYPTO_DEBUG
 		printf("%s(%d):  Returning error %s\n", __FUNCTION__, __LINE__, encrypt ? "EIO" : "ECKSUM");
+#endif
 		ret = SET_ERROR(encrypt ? EIO : ECKSUM);
 	}
 
@@ -719,6 +722,8 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	 * needs to logically go in front.
 	 */
 	iovec_t iovecs[4];
+	void *src, *dst;
+	uint8_t temp_mac[WRAPPING_MAC_LEN];
 #else
 	iovec_t plain_iovecs[2], cipher_iovecs[3];
 #endif
@@ -736,13 +741,25 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	 * (dest).  We set iovecs[0] -- the authentication data --
 	 * below.
 	 */
-	bcopy((void*)keydata, key->zk_master_keydata, keydata_len);
-	bcopy((void*)hmac_keydata, key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
+	dst = key->zk_master_keydata;
+	src = keydata;
+
+	bcopy(src, dst, keydata_len);
+
+	dst = key->zk_hmac_keydata;
+	src = hmac_keydata;
+	bcopy(src, dst, SHA512_HMAC_KEYLEN);
+
+	dst = temp_mac;
+	src = mac;
+	bcopy(src, dst, WRAPPING_MAC_LEN);
+
 	iovecs[1].iov_base = key->zk_master_keydata;
 	iovecs[1].iov_len = keydata_len;
 	iovecs[2].iov_base = key->zk_hmac_keydata;
 	iovecs[2].iov_len = SHA512_HMAC_KEYLEN;
-	iovecs[3].iov_base = mac;
+//	iovecs[3].iov_base = mac;
+	iovecs[3].iov_base = temp_mac;
 	iovecs[3].iov_len = WRAPPING_MAC_LEN;
 #else
 	/* initialize uio_ts */
@@ -1577,7 +1594,9 @@ zio_crypt_do_indirect_mac_checksum_impl(boolean_t generate, void *buf,
 	}
 
 	if (bcmp(digestbuf, cksum, ZIO_DATA_MAC_LEN) != 0) {
+#ifdef FCRYPTO_DEBUG
 		printf("%s(%d): Setting ECKSUM\n", __FUNCTION__, __LINE__);
+#endif
 		return (SET_ERROR(ECKSUM));
 	}
 	return (0);
@@ -1676,6 +1695,10 @@ zio_crypt_init_uios_zil(boolean_t encrypt, uint8_t *plainbuf,
 		nr_dst = 0;
 	}
 #ifdef __FreeBSD__
+	/*
+	 * We need at least two iovecs -- one for the AAD,
+	 * one for the MAC.
+	 */
 	bcopy(src, dst, datalen);
 	nr_dst = 2;
 #endif
@@ -1717,6 +1740,7 @@ zio_crypt_init_uios_zil(boolean_t encrypt, uint8_t *plainbuf,
 			ret = SET_ERROR(ENOMEM);
 			goto error;
 		}
+		bzero(src_iovecs, nr_src * sizeof (iovec_t));
 	}
 
 	if (nr_dst != 0) {
@@ -1725,6 +1749,7 @@ zio_crypt_init_uios_zil(boolean_t encrypt, uint8_t *plainbuf,
 			ret = SET_ERROR(ENOMEM);
 			goto error;
 		}
+		bzero(dst_iovecs, nr_dst * sizeof (iovec_t));
 	}
 
 	/*
@@ -1952,6 +1977,7 @@ zio_crypt_init_uios_dnode(boolean_t encrypt, uint64_t version,
 			ret = SET_ERROR(ENOMEM);
 			goto error;
 		}
+		bzero(src_iovecs, nr_src * sizeof (iovec_t));
 	}
 
 	if (nr_dst != 0) {
@@ -1960,6 +1986,7 @@ zio_crypt_init_uios_dnode(boolean_t encrypt, uint64_t version,
 			ret = SET_ERROR(ENOMEM);
 			goto error;
 		}
+		bzero(dst_iovecs, nr_dst * sizeof (iovec_t));
 	}
 
 #ifdef __FreeBSD__
@@ -2127,13 +2154,13 @@ zio_crypt_init_uios_normal(boolean_t encrypt, uint8_t *plainbuf,
 		ret = SET_ERROR(ENOMEM);
 		goto error;
 	}
+	bzero(cipher_iovecs, nr_cipher * sizeof (iovec_t));
 
 #ifdef __FreeBSD__
 	if (encrypt) {
 		src = plainbuf;
 		dst = cipherbuf;
 		bcopy(plainbuf, cipherbuf, datalen);
-		cipher_iovecs[0].iov_base = cipherbuf;
 	} else {
 		src = cipherbuf;
 		dst = plainbuf;
@@ -2151,7 +2178,7 @@ zio_crypt_init_uios_normal(boolean_t encrypt, uint8_t *plainbuf,
 	*enc_len = datalen;
 #ifdef __FreeBSD__
 	out_uio->uio_iov = cipher_iovecs;
-	out_uio->uio_iovcnt = 2;
+	out_uio->uio_iovcnt = nr_cipher;
 #else
 	puio->uio_iov = plain_iovecs;
 	puio->uio_iovcnt = nr_plain;
@@ -2263,6 +2290,14 @@ zio_do_crypt_data(boolean_t encrypt, zio_crypt_key_t *key, uint8_t *salt,
 	bzero(&puio, sizeof (uio_t));
 	bzero(&cuio, sizeof (uio_t));
 
+#ifdef FCRYPTO_DEBUG
+	printf("%s(%s, %p, %p, %d, %p, %p, %u, %s, %p, %p, %p)\n",
+	       __FUNCTION__,
+	       encrypt ? "encrypt" : "decrypt",
+	       key, salt, ot, iv, mac, datalen,
+	       byteswap ? "byteswap" : "native_endian", plainbuf,
+	       cipherbuf, no_crypt);
+#endif
 	/* create uios for encryption */
 	ret = zio_crypt_init_uios(encrypt, key->zk_version, ot, plainbuf,
 	    cipherbuf, datalen, byteswap, mac, &puio, &cuio, &enc_len,
