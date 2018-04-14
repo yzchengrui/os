@@ -163,7 +163,6 @@ freebsd_crypt_uio(boolean_t encrypt,
 	int error;
 	uint8_t *p = NULL;
 	size_t total = 0;
-	uint8_t stupid_key[ZIO_DATA_MAC_LEN] = { 0 };
 
 #ifdef FCRYPTO_DEBUG
 	printf("%s(%d, { %s, %d, %d, %s }, %p, { %d, %p, %u }, %p, %u, %u)\n",
