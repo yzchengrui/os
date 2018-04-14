@@ -764,7 +764,8 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	iovecs[1].iov_len = keydata_len;
 	iovecs[2].iov_base = key->zk_hmac_keydata;
 	iovecs[2].iov_len = SHA512_HMAC_KEYLEN;
-	iovecs[3].iov_base = mac;
+//	iovecs[3].iov_base = mac;
+	iovecs[3].iov_base = temp_mac;
 	iovecs[3].iov_len = WRAPPING_MAC_LEN;
 
 #else
