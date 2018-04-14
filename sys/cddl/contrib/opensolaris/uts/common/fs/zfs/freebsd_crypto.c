@@ -48,22 +48,32 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/freebsd_crypto.h>
 
+#define SHA512_HMAC_BLOCK_SIZE	128
+
+#undef FCRYPTO_DEBUG
+
 void
 crypto_mac_init(struct hmac_ctx *ctx, const crypto_key_t *c_key)
 {
-	u_char k_ipad[128], k_opad[128], key[128];
+	u_char k_ipad[SHA512_HMAC_BLOCK_SIZE],
+		k_opad[SHA512_HMAC_BLOCK_SIZE],
+		key[SHA512_HMAC_BLOCK_SIZE];
 	SHA512_CTX lctx;
 	u_int i;
+	size_t cl_bytes = CRYPTO_BITS2BYTES(c_key->ck_length);
 
-	bzero(key, sizeof(key));
+	/*
+	 * This code is based on the similar code in geom/eli/g_eli_hmac.c
+	 */
+	explicit_bzero(key, sizeof(key));
 	if (c_key->ck_length  == 0)
 		; /* do nothing */
-	else if (c_key->ck_length <= 128)
-		bcopy(c_key->ck_data, key, c_key->ck_length);
+	else if (cl_bytes <= SHA512_HMAC_BLOCK_SIZE)
+		bcopy(c_key->ck_data, key, cl_bytes);
 	else {
 		/* If key is longer than 128 bytes reset it to key = SHA512(key). */
 		SHA512_Init(&lctx);
-		SHA512_Update(&lctx, c_key->ck_data, c_key->ck_length);
+		SHA512_Update(&lctx, c_key->ck_data, cl_bytes);
 		SHA512_Final(key, &lctx);
 	}
 
@@ -73,6 +83,7 @@ crypto_mac_init(struct hmac_ctx *ctx, const crypto_key_t *c_key)
 		k_opad[i] = key[i] ^ 0x5c;
 	}
 	explicit_bzero(key, sizeof(key));
+
 	/* Start inner SHA512. */
 	SHA512_Init(&ctx->innerctx);
 	SHA512_Update(&ctx->innerctx, k_ipad, sizeof(k_ipad));
@@ -143,7 +154,7 @@ freebsd_crypt_uio(boolean_t encrypt,
     size_t auth_len)
 {
 #ifdef _KERNEL
-	struct cryptoini cri;
+	struct cryptoini cria, crie;
 	struct cryptop *crp;
 	struct cryptodesc *crd, *enc_desc, *auth_desc;
 	struct enc_xform *xform = &enc_xform_aes_nist_gcm;
@@ -151,15 +162,22 @@ freebsd_crypt_uio(boolean_t encrypt,
 	uint64_t sid;
 	int error;
 	uint8_t *p = NULL;
+	size_t total = 0;
+	uint8_t stupid_key[ZIO_DATA_MAC_LEN] = { 0 };
 
+#ifdef FCRYPTO_DEBUG
 	printf("%s(%d, { %s, %d, %d, %s }, %p, { %d, %p, %u }, %p, %u, %u)\n",
 	       __FUNCTION__, encrypt,
 	       c_info->ci_algname, c_info->ci_crypt_type, (unsigned int)c_info->ci_keylen, c_info->ci_name,
 	       data_uio,
 	       key->ck_format, key->ck_data, (unsigned int)key->ck_length,
 	       ivbuf, (unsigned int)datalen, (unsigned int)auth_len);
-	for (int i = 0; i < data_uio->uio_iovcnt; i++)
+	for (int i = 0; i < data_uio->uio_iovcnt; i++) {
 		printf("\tiovec #%d: <%p, %u>\n", i, data_uio->uio_iov[i].iov_base, (unsigned int)data_uio->uio_iov[i].iov_len);
+		total += data_uio->uio_iov[i].iov_len;
+	}
+#endif
+
 	/* Only GCM is supported for the moment */
 	if (c_info->ci_crypt_type != ZC_TYPE_GCM) {
 		error = ENOTSUP;
@@ -169,15 +187,21 @@ freebsd_crypt_uio(boolean_t encrypt,
 	/* This is only valid for GCM */
 	switch (ZIO_DATA_MAC_LEN) {
 	case AES_128_GMAC_KEY_LEN:
+#ifdef FCRYPTO_DEBUG
 		printf("%s(%d): Using 128 GMAC\n", __FUNCTION__, __LINE__);
+#endif
 		xauth = &auth_hash_nist_gmac_aes_128;
 		break;
 	case AES_192_GMAC_KEY_LEN:
+#ifdef FCRYPTO_DEBUG
 		printf("%s(%d): Using 192 GMAC\n", __FUNCTION__, __LINE__);
+#endif
 		xauth = &auth_hash_nist_gmac_aes_192;
 		break;
 	case AES_256_GMAC_KEY_LEN:
+#ifdef FCRYPTO_DEBUG
 		printf("%s(%d): Using 256 GMAC\n", __FUNCTION__, __LINE__);
+#endif
 		xauth = &auth_hash_nist_gmac_aes_256;
 		break;
 	default:
@@ -185,14 +209,22 @@ freebsd_crypt_uio(boolean_t encrypt,
 		goto bad;
 	}
 
-	bzero(&cri, sizeof(cri));
+	bzero(&crie, sizeof(crie));
+	bzero(&cria, sizeof(cria));
 
-	cri.cri_alg = xform->type;
-	cri.cri_key = key->ck_data;
-	cri.cri_klen = key->ck_length;
-	bcopy(ivbuf, cri.cri_iv, ZIO_DATA_IV_LEN);
+	crie.cri_alg = xform->type;
+	crie.cri_key = key->ck_data;
+	crie.cri_klen = key->ck_length;
+	bcopy(ivbuf, crie.cri_iv, ZIO_DATA_IV_LEN);
 
-	error = crypto_newsession(&sid, &cri, CRYPTOCAP_F_HARDWARE | CRYPTOCAP_F_SOFTWARE);
+	cria.cri_alg = xauth->type;
+	cria.cri_klen = key->ck_length;
+	cria.cri_key = key->ck_data;
+	bcopy(ivbuf, cria.cri_iv, ZIO_DATA_IV_LEN);
+	cria.cri_next = &crie;
+	// Everything else is bzero'd
+	
+	error = crypto_newsession(&sid, &cria, CRYPTOCAP_F_HARDWARE | CRYPTOCAP_F_SOFTWARE);
 	if (error != 0)
 		goto bad;
 	crp = crypto_getreq(2);
@@ -214,23 +246,27 @@ freebsd_crypt_uio(boolean_t encrypt,
 	auth_desc->crd_len = auth_len;
 	auth_desc->crd_inject = auth_len + datalen;
 	auth_desc->crd_alg = xauth->type;
-	auth_desc->crd_key = cri.cri_key;
-	auth_desc->crd_klen = cri.cri_klen;
+	auth_desc->crd_key = crie.cri_key;
+	auth_desc->crd_klen = crie.cri_klen;
 
+#ifdef FCRYPTO_DEBUG
 	printf("%s: auth: skip = %u, len = %u, inject = %u\n", __FUNCTION__, auth_desc->crd_skip, auth_desc->crd_len, auth_desc->crd_inject);
-	
+#endif
+
 	enc_desc->crd_skip = auth_len;
 	enc_desc->crd_len = datalen;
 	enc_desc->crd_inject = auth_len;
 	enc_desc->crd_alg = xform->type;
 	enc_desc->crd_flags = CRD_F_IV_EXPLICIT | CRD_F_IV_PRESENT;
 	bcopy(ivbuf, enc_desc->crd_iv, ZIO_DATA_IV_LEN);
-	enc_desc->crd_key = cri.cri_key;
-	enc_desc->crd_klen = cri.cri_klen;
+	enc_desc->crd_key = crie.cri_key;
+	enc_desc->crd_klen = crie.cri_klen;
 	enc_desc->crd_next = NULL;
 	
+#ifdef FCRYPTO_DEBUG
 	printf("%s: enc: skip = %u, len = %u, inject = %u\n", __FUNCTION__, enc_desc->crd_skip, enc_desc->crd_len, enc_desc->crd_inject);
-	
+#endif
+
 	if (encrypt)
 		enc_desc->crd_flags |= CRD_F_ENCRYPT;
 	
@@ -245,8 +281,10 @@ freebsd_crypt_uio(boolean_t encrypt,
 	crypto_freereq(crp);
 	crypto_freesession(sid);
 bad:
+#ifdef FCRYPTO_DEBUG
 	if (error)
 		printf("%s: returning error %d\n", __FUNCTION__, error);
+#endif
 	return (error);
 #endif
 	return (-1);
