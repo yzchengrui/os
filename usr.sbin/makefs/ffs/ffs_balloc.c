@@ -1,7 +1,9 @@
 /*	$NetBSD: ffs_balloc.c,v 1.13 2004/06/20 22:20:18 jmc Exp $	*/
 /* From NetBSD: ffs_balloc.c,v 1.25 2001/08/08 08:36:36 lukem Exp */
 
-/*
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 1982, 1986, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -89,6 +91,7 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 	int32_t *allocblk, allociblk[NIADDR + 1];
 	int32_t *allocib;
 	const int needswap = UFS_FSNEEDSWAP(fs);
+	struct vnode vp = { ip->i_fd, ip->i_fs, NULL, 0 };
 
 	lbn = lblkno(fs, offset);
 	size = blkoff(fs, offset) + bufsize;
@@ -132,10 +135,10 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			 */
 
 			if (bpp != NULL) {
-				error = bread(ip->i_fd, ip->i_fs, lbn,
-				    fs->fs_bsize, bpp);
+				error = bread(&vp, lbn, fs->fs_bsize, NULL,
+				    bpp);
 				if (error) {
-					brelse(*bpp);
+					brelse(*bpp, 0);
 					return (error);
 				}
 			}
@@ -158,10 +161,10 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 				 */
 
 				if (bpp != NULL) {
-					error = bread(ip->i_fd, ip->i_fs, lbn,
-					    osize, bpp);
+					error = bread(&vp, lbn, osize, NULL,
+					    bpp);
 					if (error) {
-						brelse(*bpp);
+						brelse(*bpp, 0);
 						return (error);
 					}
 				}
@@ -188,7 +191,7 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			if (error)
 				return (error);
 			if (bpp != NULL) {
-				bp = getblk(ip->i_fd, ip->i_fs, lbn, nsize);
+				bp = getblk(&vp, lbn, nsize, 0, 0, 0);
 				bp->b_blkno = fsbtodb(fs, newb);
 				clrbuf(bp);
 				*bpp = bp;
@@ -226,7 +229,7 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			return error;
 		nb = newb;
 		*allocblk++ = nb;
-		bp = getblk(ip->i_fd, ip->i_fs, indirs[1].in_lbn, fs->fs_bsize);
+		bp = getblk(&vp, indirs[1].in_lbn, fs->fs_bsize, 0, 0, 0);
 		bp->b_blkno = fsbtodb(fs, nb);
 		clrbuf(bp);
 		/*
@@ -244,10 +247,9 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 	 */
 
 	for (i = 1;;) {
-		error = bread(ip->i_fd, ip->i_fs, indirs[i].in_lbn, 
-		    fs->fs_bsize, &bp);
+		error = bread(&vp, indirs[i].in_lbn, fs->fs_bsize, NULL, &bp);
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		bap = (int32_t *)bp->b_data;
@@ -256,20 +258,19 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			break;
 		i++;
 		if (nb != 0) {
-			brelse(bp);
+			brelse(bp, 0);
 			continue;
 		}
 		if (pref == 0)
 			pref = ffs_blkpref_ufs1(ip, lbn, 0, (int32_t *)0);
 		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		nb = newb;
 		*allocblk++ = nb;
-		nbp = getblk(ip->i_fd, ip->i_fs, indirs[i].in_lbn,
-		    fs->fs_bsize);
+		nbp = getblk(&vp, indirs[i].in_lbn, fs->fs_bsize, 0, 0, 0);
 		nbp->b_blkno = fsbtodb(fs, nb);
 		clrbuf(nbp);
 		/*
@@ -278,7 +279,7 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 		 */
 
 		if ((error = bwrite(nbp)) != 0) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		bap[indirs[i - 1].in_off] = ufs_rw32(nb, needswap);
@@ -294,13 +295,13 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 		pref = ffs_blkpref_ufs1(ip, lbn, indirs[num].in_off, &bap[0]);
 		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		nb = newb;
 		*allocblk++ = nb;
 		if (bpp != NULL) {
-			nbp = getblk(ip->i_fd, ip->i_fs, lbn, fs->fs_bsize);
+			nbp = getblk(&vp, lbn, fs->fs_bsize, 0, 0, 0);
 			nbp->b_blkno = fsbtodb(fs, nb);
 			clrbuf(nbp);
 			*bpp = nbp;
@@ -314,11 +315,11 @@ ffs_balloc_ufs1(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 		bwrite(bp);
 		return (0);
 	}
-	brelse(bp);
+	brelse(bp, 0);
 	if (bpp != NULL) {
-		error = bread(ip->i_fd, ip->i_fs, lbn, (int)fs->fs_bsize, &nbp);
+		error = bread(&vp, lbn, (int)fs->fs_bsize, NULL, &nbp);
 		if (error) {
-			brelse(nbp);
+			brelse(nbp, 0);
 			return error;
 		}
 		*bpp = nbp;
@@ -340,6 +341,7 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 	int64_t *allocblk, allociblk[NIADDR + 1];
 	int64_t *allocib;
 	const int needswap = UFS_FSNEEDSWAP(fs);
+	struct vnode vp = { ip->i_fd, ip->i_fs, NULL, 0 };
 
 	lbn = lblkno(fs, offset);
 	size = blkoff(fs, offset) + bufsize;
@@ -383,10 +385,10 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			 */
 
 			if (bpp != NULL) {
-				error = bread(ip->i_fd, ip->i_fs, lbn,
-				    fs->fs_bsize, bpp);
+				error = bread(&vp, lbn, fs->fs_bsize, NULL,
+				    bpp);
 				if (error) {
-					brelse(*bpp);
+					brelse(*bpp, 0);
 					return (error);
 				}
 			}
@@ -409,10 +411,10 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 				 */
 
 				if (bpp != NULL) {
-					error = bread(ip->i_fd, ip->i_fs, lbn,
-					    osize, bpp);
+					error = bread(&vp, lbn, osize, NULL,
+					    bpp);
 					if (error) {
-						brelse(*bpp);
+						brelse(*bpp, 0);
 						return (error);
 					}
 				}
@@ -439,7 +441,7 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			if (error)
 				return (error);
 			if (bpp != NULL) {
-				bp = getblk(ip->i_fd, ip->i_fs, lbn, nsize);
+				bp = getblk(&vp, lbn, nsize, 0, 0, 0);
 				bp->b_blkno = fsbtodb(fs, newb);
 				clrbuf(bp);
 				*bpp = bp;
@@ -477,7 +479,7 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			return error;
 		nb = newb;
 		*allocblk++ = nb;
-		bp = getblk(ip->i_fd, ip->i_fs, indirs[1].in_lbn, fs->fs_bsize);
+		bp = getblk(&vp, indirs[1].in_lbn, fs->fs_bsize, 0, 0, 0);
 		bp->b_blkno = fsbtodb(fs, nb);
 		clrbuf(bp);
 		/*
@@ -495,10 +497,9 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 	 */
 
 	for (i = 1;;) {
-		error = bread(ip->i_fd, ip->i_fs, indirs[i].in_lbn, 
-		    fs->fs_bsize, &bp);
+		error = bread(&vp, indirs[i].in_lbn, fs->fs_bsize, NULL, &bp);
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		bap = (int64_t *)bp->b_data;
@@ -507,20 +508,19 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 			break;
 		i++;
 		if (nb != 0) {
-			brelse(bp);
+			brelse(bp, 0);
 			continue;
 		}
 		if (pref == 0)
 			pref = ffs_blkpref_ufs2(ip, lbn, 0, (int64_t *)0);
 		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		nb = newb;
 		*allocblk++ = nb;
-		nbp = getblk(ip->i_fd, ip->i_fs, indirs[i].in_lbn,
-		    fs->fs_bsize);
+		nbp = getblk(&vp, indirs[i].in_lbn, fs->fs_bsize, 0, 0, 0);
 		nbp->b_blkno = fsbtodb(fs, nb);
 		clrbuf(nbp);
 		/*
@@ -529,7 +529,7 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 		 */
 
 		if ((error = bwrite(nbp)) != 0) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		bap[indirs[i - 1].in_off] = ufs_rw64(nb, needswap);
@@ -545,13 +545,13 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 		pref = ffs_blkpref_ufs2(ip, lbn, indirs[num].in_off, &bap[0]);
 		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return error;
 		}
 		nb = newb;
 		*allocblk++ = nb;
 		if (bpp != NULL) {
-			nbp = getblk(ip->i_fd, ip->i_fs, lbn, fs->fs_bsize);
+			nbp = getblk(&vp, lbn, fs->fs_bsize, 0, 0, 0);
 			nbp->b_blkno = fsbtodb(fs, nb);
 			clrbuf(nbp);
 			*bpp = nbp;
@@ -565,11 +565,11 @@ ffs_balloc_ufs2(struct inode *ip, off_t offset, int bufsize, struct buf **bpp)
 		bwrite(bp);
 		return (0);
 	}
-	brelse(bp);
+	brelse(bp, 0);
 	if (bpp != NULL) {
-		error = bread(ip->i_fd, ip->i_fs, lbn, (int)fs->fs_bsize, &nbp);
+		error = bread(&vp, lbn, (int)fs->fs_bsize, NULL, &nbp);
 		if (error) {
-			brelse(nbp);
+			brelse(nbp, 0);
 			return error;
 		}
 		*bpp = nbp;

@@ -1,6 +1,8 @@
 /*	$OpenBSD: dhcpd.h,v 1.33 2004/05/06 22:29:15 deraadt Exp $	*/
 
-/*
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 2004 Henning Brauer <henning@openbsd.org>
  * Copyright (c) 1995, 1996, 1997, 1998, 1999
  * The Internet Software Consortium.    All rights reserved.
@@ -80,7 +82,7 @@
 #define	REMOTE_PORT	67
 
 struct option_data {
-	int		 len;
+	size_t		 len;
 	u_int8_t	*data;
 };
 
@@ -90,7 +92,7 @@ struct string_list {
 };
 
 struct iaddr {
-	int len;
+	size_t len;
 	unsigned char iabuf[16];
 };
 
@@ -283,9 +285,9 @@ char *parse_string(FILE *);
 int parse_ip_addr(FILE *, struct iaddr *);
 void parse_hardware_param(FILE *, struct hardware *);
 void parse_lease_time(FILE *, time_t *);
-unsigned char *parse_numeric_aggregate(FILE *, unsigned char *, int *,
-    int, int, int);
-void convert_num(unsigned char *, char *, int, int);
+unsigned char *parse_numeric_aggregate(FILE *, unsigned char *, size_t *,
+    int, unsigned, int);
+void convert_num(unsigned char *, char *, unsigned, int);
 time_t parse_date(FILE *);
 
 /* tree.c */
@@ -319,6 +321,8 @@ void cancel_timeout(void (*)(void *), void *);
 void add_protocol(char *, int, void (*)(struct protocol *), void *);
 void remove_protocol(struct protocol *);
 int interface_link_status(char *);
+void interface_set_mtu_unpriv(int, u_int16_t);
+void interface_set_mtu_priv(char *, u_int16_t); 
 
 /* hash.c */
 struct hash_table *new_hash(void);
@@ -419,7 +423,7 @@ int read_client_conf(void);
 void read_client_leases(void);
 void parse_client_statement(FILE *, struct interface_info *,
     struct client_config *);
-int parse_X(FILE *, u_int8_t *, int);
+unsigned parse_X(FILE *, u_int8_t *, unsigned);
 int parse_option_list(FILE *, u_int8_t *);
 void parse_interface_declaration(FILE *, struct client_config *);
 struct interface_info *interface_or_dummy(char *);

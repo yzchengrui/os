@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-4-Clause
+ *
  * Copyright (c) 1991 Regents of the University of California.
  * All rights reserved.
  * Copyright (c) 1994 John S. Dyson
@@ -441,8 +443,8 @@ more:
 	if (ib != 0 && pageout_count < vm_pageout_page_count)
 		goto more;
 
-	return (vm_pageout_flush(&mc[page_base], pageout_count, 0, 0, NULL,
-	    NULL));
+	return (vm_pageout_flush(&mc[page_base], pageout_count,
+	    VM_PAGER_PUT_NOREUSE, 0, NULL, NULL));
 }
 
 /*
@@ -617,7 +619,17 @@ vm_pageout_clean(vm_page_t m, int *numpagedout)
 			goto unlock_mp;
 		}
 		VM_OBJECT_WLOCK(object);
+
+		/*
+		 * Ensure that the object and vnode were not disassociated
+		 * while locks were dropped.
+		 */
+		if (vp->v_object != object) {
+			error = ENOENT;
+			goto unlock_all;
+		}
 		vm_page_lock(m);
+
 		/*
 		 * While the object and page were unlocked, the page
 		 * may have been:
@@ -1329,7 +1341,7 @@ drop_page:
 	inactq_shortage = vm_cnt.v_inactive_target - (vm_cnt.v_inactive_count +
 	    vm_cnt.v_laundry_count / act_scan_laundry_weight) +
 	    vm_paging_target() + deficit + addl_page_shortage;
-	page_shortage *= act_scan_laundry_weight;
+	inactq_shortage *= act_scan_laundry_weight;
 
 	pq = &vmd->vmd_pagequeues[PQ_ACTIVE];
 	vm_pagequeue_lock(pq);
@@ -1754,14 +1766,20 @@ vm_pageout_worker(void *arg)
 			 */
 			mtx_unlock(&vm_page_queue_free_mtx);
 			if (pass >= 1)
-				pause("psleep", hz / VM_INACT_SCAN_RATE);
+				pause("pwait", hz / VM_INACT_SCAN_RATE);
 			pass++;
 		} else {
 			/*
-			 * Yes.  Sleep until pages need to be reclaimed or
+			 * Yes.  If threads are still sleeping in VM_WAIT
+			 * then we immediately start a new scan.  Otherwise,
+			 * sleep until the next wakeup or until pages need to
 			 * have their reference stats updated.
 			 */
-			if (mtx_sleep(&vm_pageout_wanted,
+			if (vm_pages_needed) {
+				mtx_unlock(&vm_page_queue_free_mtx);
+				if (pass == 0)
+					pass++;
+			} else if (mtx_sleep(&vm_pageout_wanted,
 			    &vm_page_queue_free_mtx, PDROP | PVM, "psleep",
 			    hz) == 0) {
 				PCPU_INC(cnt.v_pdwakeups);
@@ -1847,6 +1865,7 @@ vm_pageout(void)
 #endif
 
 	swap_pager_swap_init();
+	snprintf(curthread->td_name, sizeof(curthread->td_name), "dom0");
 	error = kthread_add(vm_pageout_laundry_worker, NULL, curproc, NULL,
 	    0, 0, "laundry: dom0");
 	if (error != 0)
@@ -1869,17 +1888,42 @@ vm_pageout(void)
 }
 
 /*
- * Unless the free page queue lock is held by the caller, this function
- * should be regarded as advisory.  Specifically, the caller should
- * not msleep() on &vm_cnt.v_free_count following this function unless
- * the free page queue lock is held until the msleep() is performed.
+ * Perform an advisory wakeup of the page daemon.
  */
 void
 pagedaemon_wakeup(void)
 {
 
+	mtx_assert(&vm_page_queue_free_mtx, MA_NOTOWNED);
+
 	if (!vm_pageout_wanted && curthread->td_proc != pageproc) {
 		vm_pageout_wanted = true;
 		wakeup(&vm_pageout_wanted);
 	}
+}
+
+/*
+ * Wake up the page daemon and wait for it to reclaim free pages.
+ *
+ * This function returns with the free queues mutex unlocked.
+ */
+void
+pagedaemon_wait(int pri, const char *wmesg)
+{
+
+	mtx_assert(&vm_page_queue_free_mtx, MA_OWNED);
+
+	/*
+	 * vm_pageout_wanted may have been set by an advisory wakeup, but if the
+	 * page daemon is running on a CPU, the wakeup will have been lost.
+	 * Thus, deliver a potentially spurious wakeup to ensure that the page
+	 * daemon has been notified of the shortage.
+	 */
+	if (!vm_pageout_wanted || !vm_pages_needed) {
+		vm_pageout_wanted = true;
+		wakeup(&vm_pageout_wanted);
+	}
+	vm_pages_needed = true;
+	msleep(&vm_cnt.v_free_count, &vm_page_queue_free_mtx, PDROP | pri,
+	    wmesg, 0);
 }

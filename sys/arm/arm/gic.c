@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 2011 The FreeBSD Foundation
  * All rights reserved.
  *
@@ -1656,11 +1658,11 @@ arm_gicv2m_alloc_msi(device_t dev, device_t child, int count, int maxcount,
 				break;
 			}
 
-			KASSERT((psc->gic_irqs[irq].gi_flags & GI_FLAG_MSI)!= 0,
+			KASSERT((psc->gic_irqs[end_irq].gi_flags & GI_FLAG_MSI)!= 0,
 			    ("%s: Non-MSI interrupt found", __func__));
 
 			/* This is already used */
-			if ((psc->gic_irqs[irq].gi_flags & GI_FLAG_MSI_USED) ==
+			if ((psc->gic_irqs[end_irq].gi_flags & GI_FLAG_MSI_USED) ==
 			    GI_FLAG_MSI_USED) {
 				found = false;
 				break;

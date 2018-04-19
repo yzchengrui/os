@@ -2169,7 +2169,7 @@ class AMDGPUTargetInfo final : public TargetInfo {
 public:
   AMDGPUTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
     : TargetInfo(Triple) ,
-      GPU(isAMDGCN(Triple) ? GK_GFX6 : GK_R600),
+      GPU(isAMDGCN(Triple) ? GK_GFX6 : parseR600Name(Opts.CPU)),
       hasFP64(false),
       hasFMAF(false),
       hasLDEXPF(false),
@@ -2179,6 +2179,12 @@ public:
       hasFMAF = true;
       hasLDEXPF = true;
     }
+    if (getTriple().getArch() == llvm::Triple::r600) {
+      if (GPU == GK_EVERGREEN_DOUBLE_OPS || GPU == GK_CAYMAN) {
+        hasFMAF = true;
+      }
+    }
+
     auto IsGenericZero = isGenericZero(Triple);
     resetDataLayout(getTriple().getArch() == llvm::Triple::amdgcn ?
                     (IsGenericZero ? DataLayoutStringSIGenericIsZero :
@@ -2685,6 +2691,8 @@ class X86TargetInfo : public TargetInfo {
   bool HasCLWB = false;
   bool HasMOVBE = false;
   bool HasPREFETCHWT1 = false;
+  bool HasRetpoline = false;
+  bool HasRetpolineExternalThunk = false;
 
   /// \brief Enumeration of all of the X86 CPUs supported by Clang.
   ///
@@ -3815,6 +3823,10 @@ bool X86TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasPREFETCHWT1 = true;
     } else if (Feature == "+clzero") {
       HasCLZERO = true;
+    } else if (Feature == "+retpoline") {
+      HasRetpoline = true;
+    } else if (Feature == "+retpoline-external-thunk") {
+      HasRetpolineExternalThunk = true;
     }
 
     X86SSEEnum Level = llvm::StringSwitch<X86SSEEnum>(Feature)
@@ -4279,6 +4291,8 @@ bool X86TargetInfo::hasFeature(StringRef Feature) const {
       .Case("rdrnd", HasRDRND)
       .Case("rdseed", HasRDSEED)
       .Case("rtm", HasRTM)
+      .Case("retpoline", HasRetpoline)
+      .Case("retpoline-external-thunk", HasRetpolineExternalThunk)
       .Case("sgx", HasSGX)
       .Case("sha", HasSHA)
       .Case("sse", SSELevel >= SSE1)
@@ -9350,8 +9364,7 @@ public:
     WIntType = SignedInt;
     Char32Type = UnsignedLong;
     SigAtomicType = SignedChar;
-    resetDataLayout("e-p:16:16:16-i8:8:8-i16:16:16-i32:32:32-i64:64:64"
-		    "-f32:32:32-f64:64:64-n8");
+    resetDataLayout("e-p:16:8-i8:8-i16:8-i32:8-i64:8-f32:8-f64:8-n8-a:8");
   }
 
   void getTargetDefines(const LangOptions &Opts,

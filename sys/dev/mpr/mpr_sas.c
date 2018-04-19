@@ -708,6 +708,7 @@ mprsas_register_events(struct mpr_softc *sc)
 	setbit(events, MPI2_EVENT_IR_PHYSICAL_DISK);
 	setbit(events, MPI2_EVENT_IR_OPERATION_STATUS);
 	setbit(events, MPI2_EVENT_TEMP_THRESHOLD);
+	setbit(events, MPI2_EVENT_SAS_DEVICE_DISCOVERY_ERROR);
 	if (sc->facts->MsgVersion >= MPI2_VERSION_02_06) {
 		setbit(events, MPI2_EVENT_ACTIVE_CABLE_EXCEPTION);
 		if (sc->mpr_flags & MPR_FLAGS_GEN35_IOC) {
@@ -728,7 +729,7 @@ mpr_attach_sas(struct mpr_softc *sc)
 {
 	struct mprsas_softc *sassc;
 	cam_status status;
-	int unit, error = 0;
+	int unit, error = 0, reqs;
 
 	MPR_FUNCTRACE(sc);
 
@@ -757,7 +758,8 @@ mpr_attach_sas(struct mpr_softc *sc)
 	sc->sassc = sassc;
 	sassc->sc = sc;
 
-	if ((sassc->devq = cam_simq_alloc(sc->num_reqs)) == NULL) {
+	reqs = sc->num_reqs - sc->num_prireqs - 1;
+	if ((sassc->devq = cam_simq_alloc(reqs)) == NULL) {
 		mpr_dprint(sc, MPR_ERROR, "Cannot allocate SIMQ\n");
 		error = ENOMEM;
 		goto out;
@@ -765,7 +767,7 @@ mpr_attach_sas(struct mpr_softc *sc)
 
 	unit = device_get_unit(sc->mpr_dev);
 	sassc->sim = cam_sim_alloc(mprsas_action, mprsas_poll, "mpr", sassc,
-	    unit, &sc->mpr_mtx, sc->num_reqs, sc->num_reqs, sassc->devq);
+	    unit, &sc->mpr_mtx, reqs, reqs, sassc->devq);
 	if (sassc->sim == NULL) {
 		mpr_dprint(sc, MPR_ERROR, "Cannot allocate SIM\n");
 		error = EINVAL;

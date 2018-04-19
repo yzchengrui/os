@@ -1102,6 +1102,9 @@ options 	MD_ROOT_SIZE=10
 # images of type mfs_root or md_root.
 options 	MD_ROOT
 
+# Write-protect the md root device so that it may not be mounted writeable.
+options 	MD_ROOT_READONLY
+
 # Disk quotas are supported when this option is enabled.
 options 	QUOTA			#enable disk quotas
 
@@ -2538,8 +2541,10 @@ device		smb
 
 # SMBus peripheral devices
 #
+# jedec_dimm	Asset and temperature reporting for DDR3 and DDR4 DIMMs
 # jedec_ts	Temperature Sensor compliant with JEDEC Standard 21-C
 #
+device		jedec_dimm
 device		jedec_ts
 
 # I2C Bus
@@ -2653,7 +2658,9 @@ options 	BOOTP_WIRED_TO=fxp0 # Use interface fxp0 for BOOTP
 options 	BOOTP_BLOCKSIZE=8192 # Override NFS block size
 
 #
-# Add software watchdog routines.
+# Enable software watchdog routines, even if hardware watchdog is present.
+# By default, software watchdog timer is enabled only if no hardware watchdog
+# is present.
 #
 options 	SW_WATCHDOG
 

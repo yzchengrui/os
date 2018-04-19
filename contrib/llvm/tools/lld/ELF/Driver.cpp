@@ -345,9 +345,10 @@ void LinkerDriver::main(ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
   if (Args.hasArg(OPT_v) || Args.hasArg(OPT_version))
     message(getLLDVersion() + " (compatible with GNU linkers)");
 
-  // ld.bfd always exits after printing out the version string.
-  // ld.gold proceeds if a given option is -v. Because gold's behavior
-  // is more permissive than ld.bfd, we chose what gold does here.
+  // The behavior of -v or --version is a bit strange, but this is
+  // needed for compatibility with GNU linkers.
+  if (Args.hasArg(OPT_v) && !Args.hasArg(OPT_INPUT))
+    return;
   if (Args.hasArg(OPT_version))
     return;
 
@@ -689,6 +690,7 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->ZNow = hasZOption(Args, "now");
   Config->ZOrigin = hasZOption(Args, "origin");
   Config->ZRelro = !hasZOption(Args, "norelro");
+  Config->ZRetpolineplt = hasZOption(Args, "retpolineplt");
   Config->ZRodynamic = hasZOption(Args, "rodynamic");
   Config->ZStackSize = getZOptionValue(Args, "stack-size", 0);
   Config->ZText = !hasZOption(Args, "notext");
@@ -1008,6 +1010,15 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   // Handle the -exclude-libs option.
   if (Args.hasArg(OPT_exclude_libs))
     excludeLibs(Args, Files);
+
+  // Create ElfHeader early. We need a dummy section in
+  // addReservedSymbols to mark the created symbols as not absolute.
+  Out::ElfHeader = make<OutputSection>("", 0, SHF_ALLOC);
+  Out::ElfHeader->Size = sizeof(typename ELFT::Ehdr);
+
+  // We need to create some reserved symbols such as _end. Create them.
+  if (!Config->Relocatable)
+    addReservedSymbols<ELFT>();
 
   // Apply version scripts.
   Symtab.scanVersionScript();

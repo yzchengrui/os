@@ -3537,6 +3537,24 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 		return (dtrace_dif_varstr(
 		    (uintptr_t)curthread->t_procp->p_zone->zone_name,
 		    state, mstate));
+#elif defined(__FreeBSD__)
+	/*
+	 * On FreeBSD, we introduce compatibility to zonename by falling through
+	 * into jailname.
+	 */
+	case DIF_VAR_JAILNAME:
+		if (!dtrace_priv_kernel(state))
+			return (0);
+
+		return (dtrace_dif_varstr(
+		    (uintptr_t)curthread->td_ucred->cr_prison->pr_name,
+		    state, mstate));
+
+	case DIF_VAR_JID:
+		if (!dtrace_priv_kernel(state))
+			return (0);
+
+		return ((uint64_t)curthread->td_ucred->cr_prison->pr_id);
 #else
 		return (0);
 #endif
@@ -13838,6 +13856,7 @@ static int
 dtrace_dof_relocate(dof_hdr_t *dof, dof_sec_t *sec, uint64_t ubase)
 {
 	uintptr_t daddr = (uintptr_t)dof;
+	uintptr_t ts_end;
 	dof_relohdr_t *dofr =
 	    (dof_relohdr_t *)(uintptr_t)(daddr + sec->dofs_offset);
 	dof_sec_t *ss, *rs, *ts;
@@ -13853,6 +13872,7 @@ dtrace_dof_relocate(dof_hdr_t *dof, dof_sec_t *sec, uint64_t ubase)
 	ss = dtrace_dof_sect(dof, DOF_SECT_STRTAB, dofr->dofr_strtab);
 	rs = dtrace_dof_sect(dof, DOF_SECT_RELTAB, dofr->dofr_relsec);
 	ts = dtrace_dof_sect(dof, DOF_SECT_NONE, dofr->dofr_tgtsec);
+	ts_end = (uintptr_t)ts + sizeof (dof_sec_t);
 
 	if (ss == NULL || rs == NULL || ts == NULL)
 		return (-1); /* dtrace_dof_error() has been called already */
@@ -13875,6 +13895,11 @@ dtrace_dof_relocate(dof_hdr_t *dof, dof_sec_t *sec, uint64_t ubase)
 		case DOF_RELO_SETX:
 			if (r->dofr_offset >= ts->dofs_size || r->dofr_offset +
 			    sizeof (uint64_t) > ts->dofs_size) {
+				dtrace_dof_error(dof, "bad relocation offset");
+				return (-1);
+			}
+
+			if (taddr >= (uintptr_t)ts && taddr < ts_end) {
 				dtrace_dof_error(dof, "bad relocation offset");
 				return (-1);
 			}

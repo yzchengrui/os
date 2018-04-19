@@ -65,6 +65,8 @@
         sbin
         ..
         usr.bin
+            ctfconvert
+            ..
         ..
         usr.sbin
             dtrace
@@ -438,6 +440,8 @@
                 ..
                 nop
                 ..
+                part
+                ..
                 raid3
                 ..
                 shsec
@@ -640,13 +644,21 @@
         ..
         file2c
         ..
+        fold
+        ..
         getconf
         ..
         grep
         ..
         gzip
         ..
+        head
+        ..
+        hexdump
+        ..
         ident
+        ..
+        indent
         ..
         join
         ..
@@ -669,6 +681,8 @@
         printf
         ..
         procstat
+        ..
+        rs
         ..
         sdiff
         ..

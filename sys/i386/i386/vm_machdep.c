@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-4-Clause
+ *
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * Copyright (c) 1989, 1990 William Jolitz
  * Copyright (c) 1994 John Dyson
@@ -798,7 +800,7 @@ sf_buf_shootdown(struct sf_buf *sf, int flags)
 		CPU_NAND(&other_cpus, &sf->cpumask);
 		if (!CPU_EMPTY(&other_cpus)) {
 			CPU_OR(&sf->cpumask, &other_cpus);
-			smp_masked_invlpg(other_cpus, sf->kva);
+			smp_masked_invlpg(other_cpus, sf->kva, kernel_pmap);
 		}
 	}
 	sched_unpin();

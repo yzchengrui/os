@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2005 Olivier Houchard.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +41,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/pte-v4.h>
 #include <machine/cpufunc.h>
 #include <machine/armreg.h>
+#include <machine/vmparam.h>	/* For KERNVIRTADDR */
 
 extern char kernel_start[];
 extern char kernel_end[];

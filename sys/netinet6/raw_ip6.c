@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
  *
@@ -323,12 +325,10 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 			RIP6STAT_INC(rip6s_nosockmcast);
 		if (proto == IPPROTO_NONE)
 			m_freem(m);
-		else {
-			char *prvnxtp = ip6_get_prevhdr(m, *offp); /* XXX */
+		else
 			icmp6_error(m, ICMP6_PARAM_PROB,
 			    ICMP6_PARAMPROB_NEXTHEADER,
-			    prvnxtp - mtod(m, char *));
-		}
+			    ip6_get_prevhdr(m, *offp));
 		IP6STAT_DEC(ip6s_delivered);
 	}
 	return (IPPROTO_DONE);

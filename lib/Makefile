@@ -49,7 +49,7 @@ SUBDIR=	${SUBDIR_BOOTSTRAP} \
 	libdwarf \
 	libedit \
 	${_libefivar} \
-	${_libelftc} \
+	libelftc \
 	libevent \
 	libexecinfo \
 	libexpat \
@@ -98,7 +98,6 @@ SUBDIR=	${SUBDIR_BOOTSTRAP} \
 	${_libsmdb} \
 	${_libsmutil} \
 	libsqlite3 \
-	libstand \
 	libstdbuf \
 	libstdthreads \
 	libsysdecode \
@@ -188,7 +187,6 @@ _cuse=		libcuse
 .endif
 
 .if ${MK_TOOLCHAIN} != "no"
-_libelftc=	libelftc
 _libpe=		libpe
 .endif
 

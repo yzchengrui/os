@@ -33,14 +33,15 @@
 #ifndef _MPRVAR_H
 #define _MPRVAR_H
 
-#define MPR_DRIVER_VERSION	"15.03.00.00-fbsd"
+#define MPR_DRIVER_VERSION	"18.03.00.00-fbsd"
 
 #define MPR_DB_MAX_WAIT		2500
 
 #define MPR_REQ_FRAMES		1024
+#define MPR_PRI_REQ_FRAMES	128
 #define MPR_EVT_REPLY_FRAMES	32
 #define MPR_REPLY_FRAMES	MPR_REQ_FRAMES
-#define MPR_CHAIN_FRAMES	2048
+#define MPR_CHAIN_FRAMES	5120
 #define MPR_MAXIO_PAGES		(-1)
 #define MPR_SENSE_LEN		SSD_FULL_SIZE
 #define MPR_MSI_COUNT		1
@@ -328,6 +329,7 @@ struct mpr_softc {
 
 	MPI2_IOC_FACTS_REPLY		*facts;
 	int				num_reqs;
+	int				num_prireqs;
 	int				num_replies;
 	int				fqdepth;	/* Free queue */
 	int				pqdepth;	/* Post queue */

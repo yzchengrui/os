@@ -1,6 +1,8 @@
 /*	$OpenBSD: dhclient.c,v 1.63 2005/02/06 17:10:13 krw Exp $	*/
 
-/*
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright 2004 Henning Brauer <henning@openbsd.org>
  * Copyright (c) 1995, 1996, 1997, 1998, 1999
  * The Internet Software Consortium.    All rights reserved.
@@ -60,6 +62,7 @@ __FBSDID("$FreeBSD$");
 #include "privsep.h"
 
 #include <sys/capsicum.h>
+#include <sys/endian.h>
 
 #include <net80211/ieee80211_freebsd.h>
 
@@ -136,13 +139,16 @@ int		 fork_privchld(int, int);
 	    ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 #define	ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
+/* Minimum MTU is 68 as per RFC791, p. 24 */
+#define MIN_MTU 68
+
 static time_t	scripttime;
 
 int
 findproto(char *cp, int n)
 {
 	struct sockaddr *sa;
-	int i;
+	unsigned i;
 
 	if (n == 0)
 		return -1;
@@ -172,7 +178,7 @@ struct sockaddr *
 get_ifa(char *cp, int n)
 {
 	struct sockaddr *sa;
-	int i;
+	unsigned i;
 
 	if (n == 0)
 		return (NULL);
@@ -187,7 +193,7 @@ get_ifa(char *cp, int n)
 	return (NULL);
 }
 
-struct iaddr defaddr = { 4 };
+struct iaddr defaddr = { .len = 4 };
 uint8_t curbssid[6];
 
 static void
@@ -229,7 +235,8 @@ routehandler(struct protocol *p)
 
 	n = read(routefd, &msg, sizeof(msg));
 	rtm = (struct rt_msghdr *)msg;
-	if (n < sizeof(rtm->rtm_msglen) || n < rtm->rtm_msglen ||
+	if (n < (ssize_t)sizeof(rtm->rtm_msglen) ||
+	    n < (ssize_t)rtm->rtm_msglen ||
 	    rtm->rtm_version != RTM_VERSION)
 		return;
 
@@ -817,8 +824,19 @@ dhcpack(struct packet *packet)
 void
 bind_lease(struct interface_info *ip)
 {
+	struct option_data *opt;
+
 	/* Remember the medium. */
 	ip->client->new->medium = ip->client->medium;
+
+	opt = &ip->client->new->options[DHO_INTERFACE_MTU];
+	if (opt->len == sizeof(u_int16_t)) {
+		u_int16_t mtu = be16dec(opt->data);
+		if (mtu < MIN_MTU)
+			warning("mtu size %u < %d: ignored", (unsigned)mtu, MIN_MTU);
+		else
+			interface_set_mtu_unpriv(privfd, mtu);
+	}
 
 	/* Write out the new lease. */
 	write_client_lease(ip, ip->client->new, 0);
@@ -1477,7 +1495,8 @@ cancel:
 		memcpy(&to.s_addr, ip->client->destination.iabuf,
 		    sizeof(to.s_addr));
 
-	if (ip->client->state != S_REQUESTING)
+	if (ip->client->state != S_REQUESTING &&
+	    ip->client->state != S_REBOOTING)
 		memcpy(&from, ip->client->active->address.iabuf,
 		    sizeof(from));
 	else
@@ -2023,7 +2042,8 @@ priv_script_write_params(char *prefix, struct client_lease *lease)
 {
 	struct interface_info *ip = ifi;
 	u_int8_t dbuf[1500], *dp = NULL;
-	int i, len;
+	int i;
+	size_t len;
 	char tbuf[128];
 
 	script_set_env(ip->client, prefix, "ip_address",
@@ -2173,12 +2193,14 @@ script_write_params(char *prefix, struct client_lease *lease)
 		pr_len = strlen(prefix);
 
 	hdr.code = IMSG_SCRIPT_WRITE_PARAMS;
-	hdr.len = sizeof(hdr) + sizeof(struct client_lease) +
-	    sizeof(size_t) + fn_len + sizeof(size_t) + sn_len +
-	    sizeof(size_t) + pr_len;
+	hdr.len = sizeof(hdr) + sizeof(*lease) +
+	    sizeof(fn_len) + fn_len + sizeof(sn_len) + sn_len +
+	    sizeof(pr_len) + pr_len;
 
-	for (i = 0; i < 256; i++)
-		hdr.len += sizeof(int) + lease->options[i].len;
+	for (i = 0; i < 256; i++) {
+		hdr.len += sizeof(lease->options[i].len);
+		hdr.len += lease->options[i].len;
+	}
 
 	scripttime = time(NULL);
 
@@ -2187,7 +2209,7 @@ script_write_params(char *prefix, struct client_lease *lease)
 
 	errs = 0;
 	errs += buf_add(buf, &hdr, sizeof(hdr));
-	errs += buf_add(buf, lease, sizeof(struct client_lease));
+	errs += buf_add(buf, lease, sizeof(*lease));
 	errs += buf_add(buf, &fn_len, sizeof(fn_len));
 	errs += buf_add(buf, lease->filename, fn_len);
 	errs += buf_add(buf, &sn_len, sizeof(sn_len));
@@ -2292,7 +2314,8 @@ void
 script_set_env(struct client_state *client, const char *prefix,
     const char *name, const char *value)
 {
-	int i, j, namelen;
+	int i, namelen;
+	size_t j;
 
 	/* No `` or $() command substitution allowed in environment values! */
 	for (j=0; j < strlen(value); j++)
@@ -2360,7 +2383,7 @@ script_flush_env(struct client_state *client)
 int
 dhcp_option_ev_name(char *buf, size_t buflen, struct option *option)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; option->name[i]; i++) {
 		if (i + 1 == buflen)

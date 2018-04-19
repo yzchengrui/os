@@ -140,8 +140,8 @@ int zfs_scan_strict_mem_lim = B_FALSE;
  * some firmware bugs and resets on certain SSDs.
  */
 int zfs_top_maxinflight = 32;		/* maximum I/Os per top-level */
-unsigned int zfs_resilver_delay = 0;	/* number of ticks to delay resilver -- 2 is a good number */
-unsigned int zfs_scrub_delay = 0;	/* number of ticks to delay scrub -- 4 is a good number */
+unsigned int zfs_resilver_delay = 2;	/* number of ticks to delay resilver -- 2 is a good number */
+unsigned int zfs_scrub_delay = 4;	/* number of ticks to delay scrub -- 4 is a good number */
 unsigned int zfs_scan_idle = 50;	/* idle window in clock ticks */
 
 /*
@@ -1449,8 +1449,8 @@ dsl_scan_prefetch_cb(zio_t *zio, const zbookmark_phys_t *zb, const blkptr_t *bp,
 
 	/* broadcast that the IO has completed for rate limitting purposes */
 	mutex_enter(&spa->spa_scrub_lock);
-	ASSERT3U(spa->spa_scrub_inflight, >, 0);
-	spa->spa_scrub_inflight--;
+	ASSERT3U(spa->spa_scrub_inflight, >=, BP_GET_PSIZE(bp));
+	spa->spa_scrub_inflight -= BP_GET_PSIZE(bp);
 	cv_broadcast(&spa->spa_scrub_io_cv);
 	mutex_exit(&spa->spa_scrub_lock);
 
@@ -1536,7 +1536,7 @@ dsl_scan_prefetch_thread(void *arg)
 
 		/* remove the prefetch IO from the tree */
 		spic = avl_first(&scn->scn_prefetch_queue);
-		spa->spa_scrub_inflight = BP_GET_PSIZE(&spic->spic_bp);
+		spa->spa_scrub_inflight += BP_GET_PSIZE(&spic->spic_bp);
 		avl_remove(&scn->scn_prefetch_queue, spic);
 
 		mutex_exit(&spa->spa_scrub_lock);
@@ -2582,7 +2582,7 @@ scan_io_queue_gather(dsl_scan_io_queue_t *queue, range_seg_t *rs, list_t *list)
 	avl_index_t idx;
 	uint_t num_sios = 0;
 	int64_t bytes_issued = 0;
-	
+
 	ASSERT(rs != NULL);
 	ASSERT(MUTEX_HELD(&queue->q_vd->vdev_scan_io_queue_lock));
 
@@ -2594,10 +2594,9 @@ scan_io_queue_gather(dsl_scan_io_queue_t *queue, range_seg_t *rs, list_t *list)
 	 */
 	sio = avl_find(&queue->q_sios_by_addr, &srch_sio, &idx);
 	if (sio == NULL)
-	
-	sio = avl_nearest(&queue->q_sios_by_addr, idx, AVL_AFTER);
+		sio = avl_nearest(&queue->q_sios_by_addr, idx, AVL_AFTER);
 
-	while (sio != NULL && sio->sio_offset < rs->rs_end) {
+	while (sio != NULL && sio->sio_offset < rs->rs_end && num_sios <= 32) {
 		ASSERT3U(sio->sio_offset, >=, rs->rs_start);
 		ASSERT3U(sio->sio_offset + sio->sio_asize, <=, rs->rs_end);
 
@@ -2607,9 +2606,9 @@ scan_io_queue_gather(dsl_scan_io_queue_t *queue, range_seg_t *rs, list_t *list)
 		bytes_issued += sio->sio_asize;
 		num_sios++;
 		list_insert_tail(list, sio);
-		num_sios++;
 		sio = next_sio;
 	}
+
 	/*
 	 * We limit the number of sios we process at once to 32 to avoid
 	 * biting off more than we can chew. If we didn't take everything

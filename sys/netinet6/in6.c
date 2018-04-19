@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
  *
@@ -1449,7 +1451,7 @@ in6ifa_ifpforlinklocal(struct ifnet *ifp, int ignoreflags)
 
 
 /*
- * find the internet address corresponding to a given address.
+ * find the interface address corresponding to a given IPv6 address.
  * ifaddr is returned referenced.
  */
 struct in6_ifaddr *

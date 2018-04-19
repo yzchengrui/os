@@ -2473,7 +2473,7 @@ static int cma_alloc_any_port(struct idr *ps, struct rdma_id_private *id_priv)
 	int low, high, remaining;
 	unsigned int rover;
 
-	inet_get_local_port_range(&low, &high);
+	inet_get_local_port_range(&init_net, &low, &high);
 	remaining = (high - low) + 1;
 	rover = random() % remaining + low;
 retry:
@@ -2569,32 +2569,37 @@ static int cma_get_tcp_port(struct rdma_id_private *id_priv)
 	int ret;
 	int size;
 	struct socket *sock;
+	struct sockaddr *src_addr = (struct sockaddr *)&id_priv->id.route.addr.src_addr;
 
-	ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
+	switch (src_addr->sa_family) {
+	case AF_INET:
+	case AF_INET6:
+		break;
+	default:
+		/* other address families are not handled by iWarp */
+		id_priv->unify_ps_tcp = 0;
+		return (0);
+	}
+
+	ret = sock_create_kern(src_addr->sa_family, SOCK_STREAM, IPPROTO_TCP, &sock);
 	if (ret)
 		return ret;
 #ifdef __linux__
-	ret = sock->ops->bind(sock,
-			(struct sockaddr *) &id_priv->id.route.addr.src_addr,
-			ip_addr_size((struct sockaddr *) &id_priv->id.route.addr.src_addr));
+	ret = sock->ops->bind(sock, src_addr, ip_addr_size(src_addr));
 #else
 	SOCK_LOCK(sock);
 	sock->so_options |= SO_REUSEADDR;
 	SOCK_UNLOCK(sock);
 
-	ret = -sobind(sock,
-			(struct sockaddr *)&id_priv->id.route.addr.src_addr,
-			curthread);
+	ret = -sobind(sock, src_addr, curthread);
 #endif
 	if (ret) {
 		sock_release(sock);
 		return ret;
 	}
 
-	size = ip_addr_size((struct sockaddr *) &id_priv->id.route.addr.src_addr);
-	ret = sock_getname(sock,
-			(struct sockaddr *) &id_priv->id.route.addr.src_addr,
-			&size, 0);
+	size = ip_addr_size(src_addr);
+	ret = sock_getname(sock, src_addr, &size, 0);
 	if (ret) {
 		sock_release(sock);
 		return ret;
@@ -2729,10 +2734,6 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 {
 	struct rdma_id_private *id_priv;
 	int ret;
-#if defined(INET6)
-	int ipv6only;
-	size_t var_size = sizeof(int);
-#endif
 
 	if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
 		return -EAFNOSUPPORT;
@@ -2760,9 +2761,11 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 		if (addr->sa_family == AF_INET)
 			id_priv->afonly = 1;
 #if defined(INET6)
-		else if (addr->sa_family == AF_INET6)
-			id_priv->afonly = kernel_sysctlbyname(&thread0, "net.inet6.ip6.v6only",
-			                    &ipv6only, &var_size, NULL, 0, NULL, 0);
+		else if (addr->sa_family == AF_INET6) {
+			CURVNET_SET_QUIET(&init_net);
+			id_priv->afonly = V_ip6_v6only;
+			CURVNET_RESTORE();
+		}
 #endif
 	}
 	ret = cma_get_port(id_priv);
