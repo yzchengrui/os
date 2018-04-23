@@ -268,37 +268,21 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	bzero(key, sizeof (zio_crypt_key_t));
 
 	/* fill keydata buffers and salt with random data */
-#ifdef __FreeBSD__
-	random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
-#else
 	ret = random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
 	if (ret != 0)
 		goto error;
-#endif
 
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_master_keydata, keydata_len);
-#else
 	ret = random_get_bytes(key->zk_master_keydata, keydata_len);
 	if (ret != 0)
 		goto error;
-#endif
 
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
-#else
 	ret = random_get_bytes(key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
 	if (ret != 0)
 		goto error;
-#endif
 
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
-#else
 	ret = random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	/* derive the current key from the master key */
 	ret = hkdf_sha512(key->zk_master_keydata, keydata_len, NULL, 0,
@@ -356,13 +340,9 @@ zio_crypt_key_change_salt(zio_crypt_key_t *key)
 	uint_t keydata_len = zio_crypt_table[key->zk_crypt].ci_keylen;
 
 	/* generate a new salt */
-#ifdef __FreeBSD__
-	random_get_bytes(salt, ZIO_DATA_SALT_LEN);
-#else
 	ret = random_get_bytes(salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	rw_enter(&key->zk_salt_lock, RW_WRITER);
 
@@ -617,14 +597,10 @@ zio_crypt_key_wrap(crypto_key_t *cwkey, zio_crypt_key_t *key, uint8_t *iv,
 	keydata_len = zio_crypt_table[crypt].ci_keylen;
 
 	/* generate iv for wrapping the master and hmac key */
-#ifdef __FreeBSD__
-	random_get_pseudo_bytes(iv, WRAPPING_IV_LEN);
-#else
 	ret = random_get_pseudo_bytes(iv, WRAPPING_IV_LEN);
 	
 	if (ret != 0)
 		goto error;
-#endif
 
 #ifdef __FreeBSD__
 	/*
@@ -723,7 +699,6 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	 */
 	iovec_t iovecs[4];
 	void *src, *dst;
-	uint8_t temp_mac[WRAPPING_MAC_LEN];
 #else
 	iovec_t plain_iovecs[2], cipher_iovecs[3];
 #endif
@@ -750,17 +725,13 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	src = hmac_keydata;
 	bcopy(src, dst, SHA512_HMAC_KEYLEN);
 
-	dst = temp_mac;
-	src = mac;
-	bcopy(src, dst, WRAPPING_MAC_LEN);
-
 	iovecs[1].iov_base = key->zk_master_keydata;
 	iovecs[1].iov_len = keydata_len;
 	iovecs[2].iov_base = key->zk_hmac_keydata;
 	iovecs[2].iov_len = SHA512_HMAC_KEYLEN;
-//	iovecs[3].iov_base = mac;
-	iovecs[3].iov_base = temp_mac;
+	iovecs[3].iov_base = mac;
 	iovecs[3].iov_len = WRAPPING_MAC_LEN;
+
 #else
 	/* initialize uio_ts */
 	plain_iovecs[0].iov_base = (char *)key->zk_master_keydata;
@@ -807,6 +778,7 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 #ifdef __FreeBSD__
 	ret = zio_do_crypt_uio_opencrypto(B_FALSE, crypt, cwkey,
 	    iv, enc_len, &cuio, aad_len);
+
 #else
 	ret = zio_do_crypt_uio(B_FALSE, crypt, cwkey, NULL, iv, enc_len,
 	    &puio, &cuio, (uint8_t *)aad, aad_len);
@@ -815,13 +787,9 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 		goto error;
 
 	/* generate a fresh salt */
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
-#else
 	ret = random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	/* derive the current key from the master key */
 	ret = hkdf_sha512(key->zk_master_keydata, keydata_len, NULL, 0,
@@ -876,13 +844,9 @@ zio_crypt_generate_iv(uint8_t *ivbuf)
 	int ret;
 
 	/* randomly generate the IV */
-#ifdef __FreeBSD__
-	random_get_pseudo_bytes(ivbuf, ZIO_DATA_IV_LEN);
-#else
 	ret = random_get_pseudo_bytes(ivbuf, ZIO_DATA_IV_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	return (0);
 
@@ -2137,6 +2101,8 @@ zio_crypt_init_uios_normal(boolean_t encrypt, uint8_t *plainbuf,
 	iovec_t *plain_iovecs = NULL, *cipher_iovecs = NULL;
 #ifdef __FreeBSD__
 	void *src, *dst;
+
+//	nr_cipher = 3;
 #else
 
 	/* allocate the iovecs for the plain and cipher data */
@@ -2160,7 +2126,6 @@ zio_crypt_init_uios_normal(boolean_t encrypt, uint8_t *plainbuf,
 	if (encrypt) {
 		src = plainbuf;
 		dst = cipherbuf;
-		bcopy(plainbuf, cipherbuf, datalen);
 	} else {
 		src = cipherbuf;
 		dst = plainbuf;
@@ -2297,6 +2262,11 @@ zio_do_crypt_data(boolean_t encrypt, zio_crypt_key_t *key, uint8_t *salt,
 	       key, salt, ot, iv, mac, datalen,
 	       byteswap ? "byteswap" : "native_endian", plainbuf,
 	       cipherbuf, no_crypt);
+
+	printf("\tkey = {");
+	for (int i = 0; i < key->zk_current_key.ck_length/8; i++)
+		printf("%02x ", ((uint8_t*)key->zk_current_key.ck_data)[i]);
+	printf("}\n");
 #endif
 	/* create uios for encryption */
 	ret = zio_crypt_init_uios(encrypt, key->zk_version, ot, plainbuf,
