@@ -272,37 +272,21 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	bzero(key, sizeof (zio_crypt_key_t));
 
 	/* fill keydata buffers and salt with random data */
-#ifdef __FreeBSD__
-	random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
-#else
 	ret = random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
 	if (ret != 0)
 		goto error;
-#endif
 
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_master_keydata, keydata_len);
-#else
 	ret = random_get_bytes(key->zk_master_keydata, keydata_len);
 	if (ret != 0)
 		goto error;
-#endif
 
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
-#else
 	ret = random_get_bytes(key->zk_hmac_keydata, SHA512_HMAC_KEYLEN);
 	if (ret != 0)
 		goto error;
-#endif
 
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
-#else
 	ret = random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	/* derive the current key from the master key */
 	ret = hkdf_sha512(key->zk_master_keydata, keydata_len, NULL, 0,
@@ -370,13 +354,9 @@ zio_crypt_key_change_salt(zio_crypt_key_t *key)
 	uint_t keydata_len = zio_crypt_table[key->zk_crypt].ci_keylen;
 
 	/* generate a new salt */
-#ifdef __FreeBSD__
-	random_get_bytes(salt, ZIO_DATA_SALT_LEN);
-#else
 	ret = random_get_bytes(salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	rw_enter(&key->zk_salt_lock, RW_WRITER);
 
@@ -628,14 +608,10 @@ zio_crypt_key_wrap(crypto_key_t *cwkey, zio_crypt_key_t *key, uint8_t *iv,
 	keydata_len = zio_crypt_table[crypt].ci_keylen;
 
 	/* generate iv for wrapping the master and hmac key */
-#ifdef __FreeBSD__
-	random_get_pseudo_bytes(iv, WRAPPING_IV_LEN);
-#else
 	ret = random_get_pseudo_bytes(iv, WRAPPING_IV_LEN);
 	
 	if (ret != 0)
 		goto error;
-#endif
 
 #ifdef __FreeBSD__
 	/*
@@ -764,8 +740,7 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	iovecs[1].iov_len = keydata_len;
 	iovecs[2].iov_base = key->zk_hmac_keydata;
 	iovecs[2].iov_len = SHA512_HMAC_KEYLEN;
-//	iovecs[3].iov_base = mac;
-	iovecs[3].iov_base = temp_mac;
+	iovecs[3].iov_base = mac;
 	iovecs[3].iov_len = WRAPPING_MAC_LEN;
 
 #else
@@ -823,13 +798,9 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 		goto error;
 
 	/* generate a fresh salt */
-#ifdef __FreeBSD__
-	random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
-#else
 	ret = random_get_bytes(key->zk_salt, ZIO_DATA_SALT_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	/* derive the current key from the master key */
 	ret = hkdf_sha512(key->zk_master_keydata, keydata_len, NULL, 0,
@@ -889,13 +860,9 @@ zio_crypt_generate_iv(uint8_t *ivbuf)
 	int ret;
 
 	/* randomly generate the IV */
-#ifdef __FreeBSD__
-	random_get_pseudo_bytes(ivbuf, ZIO_DATA_IV_LEN);
-#else
 	ret = random_get_pseudo_bytes(ivbuf, ZIO_DATA_IV_LEN);
 	if (ret != 0)
 		goto error;
-#endif
 
 	return (0);
 
