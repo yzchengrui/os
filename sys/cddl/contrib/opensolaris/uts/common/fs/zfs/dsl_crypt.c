@@ -554,6 +554,7 @@ dsl_crypto_key_open(objset_t *mos, dsl_wrapping_key_t *wkey,
 	if (!dck)
 		return (SET_ERROR(ENOMEM));
 
+	bzero(dck, sizeof(dsl_crypto_key_t));
 	/* fetch all of the values we need from the ZAP */
 	ret = zap_lookup(mos, dckobj, DSL_CRYPTO_KEY_CRYPTO_SUITE, 8, 1,
 	    &crypt);

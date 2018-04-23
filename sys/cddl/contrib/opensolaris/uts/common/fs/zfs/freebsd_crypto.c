@@ -154,27 +154,35 @@ freebsd_crypt_uio(boolean_t encrypt,
     size_t auth_len)
 {
 #ifdef _KERNEL
-	struct cryptoini cria, crie;
+	struct cryptoini cria, crie, *crip;
 	struct cryptop *crp;
 	struct cryptodesc *crd, *enc_desc, *auth_desc;
 	struct enc_xform *xform = &enc_xform_aes_nist_gcm;
 	struct auth_hash *xauth;
+	iovec_t *last_iovec;
 	uint64_t sid;
 	int error;
 	uint8_t *p = NULL;
 	size_t total = 0;
 
 #ifdef FCRYPTO_DEBUG
-	printf("%s(%d, { %s, %d, %d, %s }, %p, { %d, %p, %u }, %p, %u, %u)\n",
-	       __FUNCTION__, encrypt,
+	printf("%s(%s, { %s, %d, %d, %s }, %p, { %d, %p, %u }, %p, %u, %u)\n",
+	       __FUNCTION__, encrypt ? "encrypt" : "decrypt",
 	       c_info->ci_algname, c_info->ci_crypt_type, (unsigned int)c_info->ci_keylen, c_info->ci_name,
 	       data_uio,
 	       key->ck_format, key->ck_data, (unsigned int)key->ck_length,
 	       ivbuf, (unsigned int)datalen, (unsigned int)auth_len);
+	printf("\tkey = { ");
+	for (int i = 0; i < key->ck_length / 8; i++) {
+		uint8_t *b = (uint8_t*)key->ck_data;
+		printf("%02x ", b[i]);
+	}
+	printf("}\n");
 	for (int i = 0; i < data_uio->uio_iovcnt; i++) {
 		printf("\tiovec #%d: <%p, %u>\n", i, data_uio->uio_iov[i].iov_base, (unsigned int)data_uio->uio_iov[i].iov_len);
 		total += data_uio->uio_iov[i].iov_len;
 	}
+	data_uio->uio_resid = total;
 #endif
 
 	/* Only GCM is supported for the moment */
@@ -217,15 +225,40 @@ freebsd_crypt_uio(boolean_t encrypt,
 	bcopy(ivbuf, crie.cri_iv, ZIO_DATA_IV_LEN);
 
 	cria.cri_alg = xauth->type;
+#if 0
 	cria.cri_klen = key->ck_length;
 	cria.cri_key = key->ck_data;
 	bcopy(ivbuf, cria.cri_iv, ZIO_DATA_IV_LEN);
 	cria.cri_next = &crie;
+#else
+# if 0
+	uint8_t stupid_empty_auth_key[ZIO_DATA_MAC_LEN] = { 0 };
+	cria.cri_klen = ZIO_DATA_MAC_LEN * 8;
+	cria.cri_key = stupid_empty_auth_key;
+# else
+	// The tag is always last in the uio
+	last_iovec = data_uio->uio_iov + (data_uio->uio_iovcnt - 1);
+	cria.cri_klen = last_iovec->iov_len * 8;
+	cria.cri_key = last_iovec->iov_base;
+# endif
+
+#endif
+	if (encrypt) {
+		crie.cri_next = &cria;
+		cria.cri_next = NULL;
+		crip = &crie;
+	} else {
+		cria.cri_next = &crie;
+		crie.cri_next = NULL;
+		crip = &cria;
+	}
 	// Everything else is bzero'd
 	
-	error = crypto_newsession(&sid, &cria, CRYPTOCAP_F_HARDWARE | CRYPTOCAP_F_SOFTWARE);
-	if (error != 0)
+	error = crypto_newsession(&sid, crip, CRYPTOCAP_F_HARDWARE | CRYPTOCAP_F_SOFTWARE);
+	if (error != 0) {
+		printf("%s(%d):  crypto_newsession failed with %d\n", __FUNCTION__, __LINE__, error);
 		goto bad;
+	}
 	crp = crypto_getreq(2);
 	if (crp == NULL) {
 		error = ENOMEM;
@@ -245,9 +278,11 @@ freebsd_crypt_uio(boolean_t encrypt,
 	auth_desc->crd_len = auth_len;
 	auth_desc->crd_inject = auth_len + datalen;
 	auth_desc->crd_alg = xauth->type;
-	auth_desc->crd_key = crie.cri_key;
-	auth_desc->crd_klen = crie.cri_klen;
-
+//	auth_desc->crd_key = crie.cri_key;
+//	auth_desc->crd_klen = crie.cri_klen;
+	auth_desc->crd_key = cria.cri_key;
+	auth_desc->crd_klen = cria.cri_klen;
+	
 #ifdef FCRYPTO_DEBUG
 	printf("%s: auth: skip = %u, len = %u, inject = %u\n", __FUNCTION__, auth_desc->crd_skip, auth_desc->crd_len, auth_desc->crd_inject);
 #endif
