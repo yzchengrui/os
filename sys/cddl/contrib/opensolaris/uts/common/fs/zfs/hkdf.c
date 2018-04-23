@@ -51,7 +51,7 @@ hkdf_sha512_extract(uint8_t *salt, uint_t salt_len, uint8_t *key_material,
 	key.ck_data = salt;
 
 #ifdef __FreeBSD__
-	crypto_mac(&key, NULL, 0, out_buf, SHA512_DIGEST_LENGTH);
+	crypto_mac(&key, key_material, km_len, out_buf, SHA512_DIGEST_LENGTH);
 #else
 	/* initialize crypto data for the input and output data */
 	input_cd.cd_format = CRYPTO_DATA_RAW;
