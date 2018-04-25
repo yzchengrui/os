@@ -839,7 +839,7 @@ zil_claim(dsl_pool_t *dp, dsl_dataset_t *ds, void *txarg)
 	    zh->zh_claim_txg == 0)) {
 		if (!BP_IS_HOLE(&zh->zh_log)) {
 			(void) zil_parse(zilog, zil_clear_log_block,
-			    zil_noop_log_record, tx, first_txg);
+			    zil_noop_log_record, tx, first_txg, B_FALSE);
 		}
 		BP_ZERO(&zh->zh_log);
 		if (os->os_encrypted)
