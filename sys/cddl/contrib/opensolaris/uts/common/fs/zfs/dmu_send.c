@@ -2868,8 +2868,6 @@ receive_spill(struct receive_writer_arg *rwa, struct drr_spill *drrs,
 		return (err);
 	}
 	dmu_buf_will_dirty(db_spill, tx);
-	if (rwa->raw)
-		VERIFY0(dmu_object_dirty_raw(rwa->os, drrs->drr_object, tx));
 
 	if (db_spill->db_size < drrs->drr_length)
 		VERIFY(0 == dbuf_spill_set_blksz(db_spill,
@@ -2905,13 +2903,8 @@ receive_free(struct receive_writer_arg *rwa, struct drr_free *drrf)
 	if (dmu_object_info(rwa->os, drrf->drr_object, NULL) != 0)
 		return (SET_ERROR(EINVAL));
 
-	if (rwa->raw) {
-		err = dmu_free_long_range_raw(rwa->os, drrf->drr_object,
-		    drrf->drr_offset, drrf->drr_length);
-	} else {
-		err = dmu_free_long_range(rwa->os, drrf->drr_object,
-		    drrf->drr_offset, drrf->drr_length);
-	}
+	err = dmu_free_long_range(rwa->os, drrf->drr_object,
+	    drrf->drr_offset, drrf->drr_length);
 
 	return (err);
 }
