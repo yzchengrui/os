@@ -771,7 +771,7 @@ dmu_objset_zfs_unmounting(objset_t *os)
 
 static int
 dmu_free_long_range_impl(objset_t *os, dnode_t *dn, uint64_t offset,
-    uint64_t length, boolean_t raw)
+    uint64_t length)
 {
 	uint64_t object_size = (dn->dn_maxblkid + 1) * dn->dn_datablksz;
 	int err;
@@ -867,7 +867,7 @@ dmu_free_long_range(objset_t *os, uint64_t object,
 	err = dnode_hold(os, object, FTAG, &dn);
 	if (err != 0)
 		return (err);
-	err = dmu_free_long_range_impl(os, dn, offset, length, B_FALSE);
+	err = dmu_free_long_range_impl(os, dn, offset, length);
 
 	/*
 	 * It is important to zero out the maxblkid when freeing the entire
@@ -882,37 +882,8 @@ dmu_free_long_range(objset_t *os, uint64_t object,
 	return (err);
 }
 
-/*
- * This function is equivalent to dmu_free_long_range(), but also
- * marks the new dirty record as a raw write.
- */
 int
-dmu_free_long_range_raw(objset_t *os, uint64_t object,
-    uint64_t offset, uint64_t length)
-{
-	dnode_t *dn;
-	int err;
-
-	err = dnode_hold(os, object, FTAG, &dn);
-	if (err != 0)
-		return (err);
-	err = dmu_free_long_range_impl(os, dn, offset, length, B_TRUE);
-
-	/*
-	 * It is important to zero out the maxblkid when freeing the entire
-	 * file, so that (a) subsequent calls to dmu_free_long_range_impl()
-	 * will take the fast path, and (b) dnode_reallocate() can verify
-	 * that the entire file has been freed.
-	 */
-	if (err == 0 && offset == 0 && length == DMU_OBJECT_END)
-		dn->dn_maxblkid = 0;
-
-	dnode_rele(dn, FTAG);
-	return (err);
-}
-
-static int
-dmu_free_long_object_impl(objset_t *os, uint64_t object, boolean_t raw)
+dmu_free_long_object(objset_t *os, uint64_t object)
 {
 	dmu_tx_t *tx;
 	int err;
@@ -937,19 +908,6 @@ dmu_free_long_object_impl(objset_t *os, uint64_t object, boolean_t raw)
 
 	return (err);
 }
-
-int
-dmu_free_long_object(objset_t *os, uint64_t object)
-{
-	return (dmu_free_long_object_impl(os, object, B_FALSE));
-}
-
-int
-dmu_free_long_object_raw(objset_t *os, uint64_t object)
-{
-	return (dmu_free_long_object_impl(os, object, B_TRUE));
-}
-
 
 int
 dmu_free_range(objset_t *os, uint64_t object, uint64_t offset,
@@ -2460,25 +2418,6 @@ dmu_object_set_compress(objset_t *os, uint64_t object, uint8_t compress,
 	dn->dn_compress = compress;
 	dnode_setdirty(dn, tx);
 	dnode_rele(dn, FTAG);
-}
-
-/*
- * Dirty an object and set the dirty record's raw flag. This is used
- * when writing raw data to an object that will not effect the
- * encryption parameters, specifically during raw receives.
- */
-int
-dmu_object_dirty_raw(objset_t *os, uint64_t object, dmu_tx_t *tx)
-{
-	dnode_t *dn;
-	int err;
-
-	err = dnode_hold(os, object, FTAG, &dn);
-	if (err)
-		return (err);
-	dmu_buf_will_change_crypt_params((dmu_buf_t *)dn->dn_dbuf, tx);
-	dnode_rele(dn, FTAG);
-	return (err);
 }
 
 int zfs_mdcomp_disable = 0;
