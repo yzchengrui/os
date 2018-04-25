@@ -1843,15 +1843,7 @@ dsl_dataset_create_crypt_sync(uint64_t dsobj, dsl_dir_t *dd,
 	/*
 	 * A NULL dcp at this point indicates this is the origin dataset
 	 * which does not have an objset to encrypt. Raw receives will handle
-<<<<<<< HEAD
-<<<<<<< HEAD
 	 * encryption separately later. In both cases we can simply return.
-=======
-	 * encryption seperately later. In both cases we can simply return.
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
-	 * encryption seperately later. In both cases we can simply return.
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 	 */
 	if (dcp == NULL || dcp->cp_cmd == DCP_CMD_RAW_RECV)
 		return;
@@ -1902,8 +1894,6 @@ dsl_dataset_create_crypt_sync(uint64_t dsobj, dsl_dir_t *dd,
 
 typedef struct dsl_crypto_recv_key_arg {
 	uint64_t dcrka_dsobj;
-<<<<<<< HEAD
-<<<<<<< HEAD
 	dmu_objset_type_t dcrka_ostype;
 	nvlist_t *dcrka_nvl;
 	boolean_t dcrka_do_key;
@@ -2069,35 +2059,6 @@ dsl_crypto_recv_raw_key_check(dsl_dataset_t *ds, nvlist_t *nvl, dmu_tx_t *tx)
 	uint_t len;
 	uint64_t intval, guid, version;
 	boolean_t is_passphrase = B_FALSE;
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	nvlist_t *dcrka_nvl;
-	dmu_objset_type_t dcrka_ostype;
-} dsl_crypto_recv_key_arg_t;
-
-int
-dsl_crypto_recv_key_check(void *arg, dmu_tx_t *tx)
-{
-	int ret;
-	objset_t *mos = tx->tx_pool->dp_meta_objset;
-	objset_t *os;
-	dnode_t *mdn;
-	dsl_crypto_recv_key_arg_t *dcrka = arg;
-	nvlist_t *nvl = dcrka->dcrka_nvl;
-	dsl_dataset_t *ds = NULL;
-	uint8_t *buf = NULL;
-	uint_t len;
-	uint64_t intval, guid, nlevels, blksz, ibs, nblkptr, maxblkid, version;
-	boolean_t is_passphrase = B_FALSE;
-
-	ret = dsl_dataset_hold_obj(tx->tx_pool, dcrka->dcrka_dsobj, FTAG, &ds);
-	if (ret != 0)
-		goto error;
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
 	ASSERT(dsl_dataset_phys(ds)->ds_flags & DS_FLAG_INCONSISTENT);
 
@@ -2108,31 +2069,12 @@ dsl_crypto_recv_key_check(void *arg, dmu_tx_t *tx)
 	 */
 	ret = nvlist_lookup_uint64(nvl, DSL_CRYPTO_KEY_CRYPTO_SUITE, &intval);
 	if (ret != 0 || intval >= ZIO_CRYPT_FUNCTIONS ||
-<<<<<<< HEAD
-<<<<<<< HEAD
 	    intval <= ZIO_CRYPT_OFF)
 		return (SET_ERROR(EINVAL));
 
 	ret = nvlist_lookup_uint64(nvl, DSL_CRYPTO_KEY_GUID, &intval);
 	if (ret != 0)
 		return (SET_ERROR(EINVAL));
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	    intval <= ZIO_CRYPT_OFF) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, DSL_CRYPTO_KEY_GUID, &intval);
-	if (ret != 0) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
 	/*
 	 * If this is an incremental receive make sure the given key guid
@@ -2142,30 +2084,13 @@ dsl_crypto_recv_key_check(void *arg, dmu_tx_t *tx)
 		ret = zap_lookup(mos, ds->ds_dir->dd_crypto_obj,
 		    DSL_CRYPTO_KEY_GUID, 8, 1, &guid);
 		if (ret != 0)
-<<<<<<< HEAD
-<<<<<<< HEAD
 			return (ret);
 		if (intval != guid)
 			return (SET_ERROR(EACCES));
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-			goto error;
-
-		if (intval != guid) {
-			ret = SET_ERROR(EACCES);
-			goto error;
-		}
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 	}
 
 	ret = nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_MASTER_KEY,
 	    &buf, &len);
-<<<<<<< HEAD
-<<<<<<< HEAD
 	if (ret != 0 || len != MASTER_KEY_MAX_LEN)
 		return (SET_ERROR(EINVAL));
 
@@ -2181,36 +2106,6 @@ dsl_crypto_recv_key_check(void *arg, dmu_tx_t *tx)
 	ret = nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_MAC, &buf, &len);
 	if (ret != 0 || len != WRAPPING_MAC_LEN)
 		return (SET_ERROR(EINVAL));
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	if (ret != 0 || len != MASTER_KEY_MAX_LEN) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_HMAC_KEY,
-	    &buf, &len);
-	if (ret != 0 || len != SHA512_HMAC_KEYLEN) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_IV, &buf, &len);
-	if (ret != 0 || len != WRAPPING_IV_LEN) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_MAC, &buf, &len);
-	if (ret != 0 || len != WRAPPING_MAC_LEN) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
 	/*
 	 * We don't support receiving old on-disk formats. The version 0
@@ -2219,46 +2114,14 @@ dsl_crypto_recv_key_check(void *arg, dmu_tx_t *tx)
 	 * the old version an on-disk errata #3.
 	 */
 	ret = nvlist_lookup_uint64(nvl, DSL_CRYPTO_KEY_VERSION, &version);
-<<<<<<< HEAD
-<<<<<<< HEAD
 	if (ret != 0 || version != ZIO_CRYPT_KEY_CURRENT_VERSION)
 		return (SET_ERROR(ENOTSUP));
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	if (ret != 0 || version != ZIO_CRYPT_KEY_CURRENT_VERSION) {
-		ret = SET_ERROR(ENOTSUP);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint8_array(nvl, "portable_mac", &buf, &len);
-	if (ret != 0 || len != ZIO_OBJSET_MAC_LEN) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
 	ret = nvlist_lookup_uint64(nvl, zfs_prop_to_name(ZFS_PROP_KEYFORMAT),
 	    &intval);
 	if (ret != 0 || intval >= ZFS_KEYFORMAT_FORMATS ||
-<<<<<<< HEAD
-<<<<<<< HEAD
 	    intval == ZFS_KEYFORMAT_NONE)
 		return (SET_ERROR(EINVAL));
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	    intval == ZFS_KEYFORMAT_NONE) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
 	is_passphrase = (intval == ZFS_KEYFORMAT_PASSPHRASE);
 
@@ -2268,8 +2131,6 @@ dsl_crypto_recv_key_check(void *arg, dmu_tx_t *tx)
 	 */
 	ret = nvlist_lookup_uint64(nvl, zfs_prop_to_name(ZFS_PROP_PBKDF2_ITERS),
 	    &intval);
-<<<<<<< HEAD
-<<<<<<< HEAD
 	if (ret != 0 || (is_passphrase == (intval == 0)))
 		return (SET_ERROR(EINVAL));
 
@@ -2295,131 +2156,6 @@ dsl_crypto_recv_raw_key_sync(dsl_dataset_t *ds, nvlist_t *nvl, dmu_tx_t *tx)
 	char *keylocation = "prompt";
 
 	/* lookup the values we need to create the DSL Crypto Key */
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	if (ret != 0 || (is_passphrase == (intval == 0))) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, zfs_prop_to_name(ZFS_PROP_PBKDF2_SALT),
-	    &intval);
-	if (ret != 0 || (is_passphrase == (intval == 0))) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	/* raw receives also need info about the structure of the metadnode */
-	ret = nvlist_lookup_uint64(nvl, "mdn_checksum", &intval);
-	if (ret != 0 || intval >= ZIO_CHECKSUM_LEGACY_FUNCTIONS) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, "mdn_compress", &intval);
-	if (ret != 0 || intval >= ZIO_COMPRESS_LEGACY_FUNCTIONS) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, "mdn_nlevels", &nlevels);
-	if (ret != 0 || nlevels > DN_MAX_LEVELS) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, "mdn_blksz", &blksz);
-	if (ret != 0 || blksz < SPA_MINBLOCKSIZE) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	} else if (blksz > spa_maxblocksize(tx->tx_pool->dp_spa)) {
-		ret = SET_ERROR(ENOTSUP);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, "mdn_indblkshift", &ibs);
-	if (ret != 0 || ibs < DN_MIN_INDBLKSHIFT ||
-	    ibs > DN_MAX_INDBLKSHIFT) {
-		ret = SET_ERROR(ENOTSUP);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, "mdn_nblkptr", &nblkptr);
-	if (ret != 0 || nblkptr != DN_MAX_NBLKPTR) {
-		ret = SET_ERROR(ENOTSUP);
-		goto error;
-	}
-
-	ret = nvlist_lookup_uint64(nvl, "mdn_maxblkid", &maxblkid);
-	if (ret != 0) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-
-	ret = dmu_objset_from_ds(ds, &os);
-	if (ret != 0)
-		goto error;
-
-	/*
-	 * Useraccounting is not portable and must be done with the keys loaded.
-	 * Therefore, whenever we do any kind of receive the useraccounting
-	 * must not be present.
-	 */
-	ASSERT0(os->os_flags & OBJSET_FLAG_USERACCOUNTING_COMPLETE);
-
-	mdn = DMU_META_DNODE(os);
-
-	/*
-	 * If we already created the objset, make sure its unchangable
-	 * properties match the ones received in the nvlist.
-	 */
-	rrw_enter(&ds->ds_bp_rwlock, RW_READER, FTAG);
-	if (!BP_IS_HOLE(dsl_dataset_get_blkptr(ds)) &&
-	    (mdn->dn_nlevels != nlevels || mdn->dn_datablksz != blksz ||
-	    mdn->dn_indblkshift != ibs || mdn->dn_nblkptr != nblkptr)) {
-		ret = SET_ERROR(EINVAL);
-		goto error;
-	}
-	rrw_exit(&ds->ds_bp_rwlock, FTAG);
-
-	dsl_dataset_rele(ds, FTAG);
-	return (0);
-
-error:
-	if (ds != NULL)
-		dsl_dataset_rele(ds, FTAG);
-	return (ret);
-}
-
-static void
-dsl_crypto_recv_key_sync(void *arg, dmu_tx_t *tx)
-{
-	dsl_crypto_recv_key_arg_t *dcrka = arg;
-	uint64_t dsobj = dcrka->dcrka_dsobj;
-	nvlist_t *nvl = dcrka->dcrka_nvl;
-	dsl_pool_t *dp = tx->tx_pool;
-	objset_t *mos = dp->dp_meta_objset;
-	dsl_dataset_t *ds;
-	objset_t *os;
-	dnode_t *mdn;
-	uint8_t *keydata, *hmac_keydata, *iv, *mac, *portable_mac;
-	uint_t len;
-	uint64_t rddobj, one = 1;
-	uint64_t version = ZIO_CRYPT_KEY_CURRENT_VERSION;
-	uint64_t crypt, guid, keyformat, iters, salt;
-	uint64_t compress, checksum, nlevels, blksz, ibs, maxblkid;
-	char *keylocation = "prompt";
-
-	VERIFY0(dsl_dataset_hold_obj(dp, dsobj, FTAG, &ds));
-	VERIFY0(dmu_objset_from_ds(ds, &os));
-	mdn = DMU_META_DNODE(os);
-
-	/* lookup the values we need to create the DSL Crypto Key and objset */
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 	crypt = fnvlist_lookup_uint64(nvl, DSL_CRYPTO_KEY_CRYPTO_SUITE);
 	guid = fnvlist_lookup_uint64(nvl, DSL_CRYPTO_KEY_GUID);
 	keyformat = fnvlist_lookup_uint64(nvl,
@@ -2432,8 +2168,6 @@ dsl_crypto_recv_key_sync(void *arg, dmu_tx_t *tx)
 	    &keydata, &len));
 	VERIFY0(nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_HMAC_KEY,
 	    &hmac_keydata, &len));
-<<<<<<< HEAD
-<<<<<<< HEAD
 	VERIFY0(nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_IV, &iv, &len));
 	VERIFY0(nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_MAC, &mac, &len));
 
@@ -2464,81 +2198,6 @@ dsl_crypto_recv_key_sync(void *arg, dmu_tx_t *tx)
 		/*
 		 * Set the keylocation to prompt by default. If keylocation
 		 * has been provided via the properties, this will be overridden
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-	VERIFY0(nvlist_lookup_uint8_array(nvl, "portable_mac", &portable_mac,
-	    &len));
-	VERIFY0(nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_IV, &iv, &len));
-	VERIFY0(nvlist_lookup_uint8_array(nvl, DSL_CRYPTO_KEY_MAC, &mac, &len));
-	compress = fnvlist_lookup_uint64(nvl, "mdn_compress");
-	checksum = fnvlist_lookup_uint64(nvl, "mdn_checksum");
-	nlevels = fnvlist_lookup_uint64(nvl, "mdn_nlevels");
-	blksz = fnvlist_lookup_uint64(nvl, "mdn_blksz");
-	ibs = fnvlist_lookup_uint64(nvl, "mdn_indblkshift");
-	maxblkid = fnvlist_lookup_uint64(nvl, "mdn_maxblkid");
-
-	/* if we haven't created an objset for the ds yet, do that now */
-	rrw_enter(&ds->ds_bp_rwlock, RW_READER, FTAG);
-	if (BP_IS_HOLE(dsl_dataset_get_blkptr(ds))) {
-		(void) dmu_objset_create_impl_dnstats(dp->dp_spa, ds,
-		    dsl_dataset_get_blkptr(ds), dcrka->dcrka_ostype, nlevels,
-		    blksz, ibs, tx);
-	}
-	rrw_exit(&ds->ds_bp_rwlock, FTAG);
-
-	/*
-	 * Set the portable MAC. The local MAC will always be zero since the
-	 * incoming data will all be portable and user accounting will be
-	 * deferred until the next mount. Afterwards, flag the os to be
-	 * written out raw next time.
-	 */
-	arc_release(os->os_phys_buf, &os->os_phys_buf);
-	bcopy(portable_mac, os->os_phys->os_portable_mac, ZIO_OBJSET_MAC_LEN);
-	bzero(os->os_phys->os_local_mac, ZIO_OBJSET_MAC_LEN);
-	os->os_next_write_raw = B_TRUE;
-
-	/* set metadnode compression and checksum */
-	mdn->dn_compress = compress;
-	mdn->dn_checksum = checksum;
-
-	rw_enter(&mdn->dn_struct_rwlock, RW_WRITER);
-	dnode_new_blkid(mdn, maxblkid, tx, B_FALSE);
-	rw_exit(&mdn->dn_struct_rwlock);
-
-	dsl_dataset_dirty(ds, tx);
-
-	/* if this is a new dataset setup the DSL Crypto Key. */
-	if (ds->ds_dir->dd_crypto_obj == 0) {
-		/* zapify the dsl dir so we can add the key object to it */
-		dmu_buf_will_dirty(ds->ds_dir->dd_dbuf, tx);
-		dsl_dir_zapify(ds->ds_dir, tx);
-
-		/* create the DSL Crypto Key on disk and activate the feature */
-		ds->ds_dir->dd_crypto_obj = zap_create(mos,
-		    DMU_OTN_ZAP_METADATA, DMU_OT_NONE, 0, tx);
-		VERIFY0(zap_update(tx->tx_pool->dp_meta_objset,
-		    ds->ds_dir->dd_crypto_obj, DSL_CRYPTO_KEY_REFCOUNT,
-		    sizeof (uint64_t), 1, &one, tx));
-		VERIFY0(zap_update(tx->tx_pool->dp_meta_objset,
-		    ds->ds_dir->dd_crypto_obj, DSL_CRYPTO_KEY_VERSION,
-		    sizeof (uint64_t), 1, &version, tx));
-
-		dsl_dataset_activate_feature(dsobj, SPA_FEATURE_ENCRYPTION, tx);
-		ds->ds_feature_inuse[SPA_FEATURE_ENCRYPTION] = B_TRUE;
-
-		/* save the dd_crypto_obj on disk */
-		VERIFY0(zap_add(mos, ds->ds_dir->dd_object,
-		    DD_FIELD_CRYPTO_KEY_OBJ, sizeof (uint64_t), 1,
-		    &ds->ds_dir->dd_crypto_obj, tx));
-
-		/*
-		 * Set the keylocation to prompt by default. If keylocation
-		 * has been provided via the properties, this will be overriden
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 		 * later.
 		 */
 		dsl_prop_set_sync_impl(ds,
@@ -2546,8 +2205,6 @@ dsl_crypto_recv_key_sync(void *arg, dmu_tx_t *tx)
 		    ZPROP_SRC_LOCAL, 1, strlen(keylocation) + 1,
 		    keylocation, tx);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 		rddobj = dd->dd_object;
 	} else {
 		VERIFY0(dsl_dir_get_encryption_root_ddobj(dd, &rddobj));
@@ -2606,23 +2263,6 @@ dsl_crypto_recv_key_sync(void *arg, dmu_tx_t *tx)
 	    dcrka->dcrka_nvl, tx);
 	if (dcrka->dcrka_do_key)
 		dsl_crypto_recv_raw_key_sync(ds, dcrka->dcrka_nvl, tx);
-=======
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-		rddobj = ds->ds_dir->dd_object;
-	} else {
-		VERIFY0(dsl_dir_get_encryption_root_ddobj(ds->ds_dir, &rddobj));
-	}
-
-	/* sync the key data to the ZAP object on disk */
-	dsl_crypto_key_sync_impl(mos, ds->ds_dir->dd_crypto_obj, crypt,
-	    rddobj, guid, iv, mac, keydata, hmac_keydata, keyformat, salt,
-	    iters, tx);
-
-<<<<<<< HEAD
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 	dsl_dataset_rele(ds, FTAG);
 }
 
@@ -2632,35 +2272,15 @@ dsl_crypto_recv_key_sync(void *arg, dmu_tx_t *tx)
  * without wrapping it.
  */
 int
-<<<<<<< HEAD
-<<<<<<< HEAD
 dsl_crypto_recv_raw(const char *poolname, uint64_t dsobj,
     dmu_objset_type_t ostype, nvlist_t *nvl, boolean_t do_key)
-=======
-dsl_crypto_recv_key(const char *poolname, uint64_t dsobj,
-    dmu_objset_type_t ostype, nvlist_t *nvl)
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
-dsl_crypto_recv_key(const char *poolname, uint64_t dsobj,
-    dmu_objset_type_t ostype, nvlist_t *nvl)
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 {
 	dsl_crypto_recv_key_arg_t dcrka;
 
 	dcrka.dcrka_dsobj = dsobj;
-<<<<<<< HEAD
-<<<<<<< HEAD
 	dcrka.dcrka_ostype = ostype;
 	dcrka.dcrka_nvl = nvl;
 	dcrka.dcrka_do_key = do_key;
-=======
-	dcrka.dcrka_nvl = nvl;
-	dcrka.dcrka_ostype = ostype;
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
-=======
-	dcrka.dcrka_nvl = nvl;
-	dcrka.dcrka_ostype = ostype;
->>>>>>> First checkpoint for porting over the OpenZFS crypto PR
 
 	return (dsl_sync_task(poolname, dsl_crypto_recv_key_check,
 	    dsl_crypto_recv_key_sync, &dcrka, 1, ZFS_SPACE_CHECK_NORMAL));
