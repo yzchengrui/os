@@ -1545,6 +1545,10 @@ recv_begin_check_existing_impl(dmu_recv_begin_arg_t *drba, dsl_dataset_t *ds,
 		if (!encrypted && raw)
 			return (SET_ERROR(EINVAL));
 
+		/* Can't perform a raw receive on top of a non-raw receive */
+		if (!encrypted && raw)
+			return (SET_ERROR(EINVAL));
+
 		/* Find snapshot in this dir that matches fromguid. */
 		while (obj != 0) {
 			error = dsl_dataset_hold_obj(dp, obj, FTAG,
