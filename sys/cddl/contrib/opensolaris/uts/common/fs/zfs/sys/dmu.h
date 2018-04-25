@@ -142,7 +142,7 @@ typedef enum dmu_object_byteswap {
 
 #define	DMU_OT_IS_ENCRYPTED(ot) (((ot) & DMU_OT_NEWTYPE) ? \
 	((ot) & DMU_OT_ENCRYPTED) : \
-	dmu_ot[(int)(ot)].ot_encrypt)
+	DMU_OT_IS_ENCRYPTED_IMPL(ot))
 
 /*
  * These object types use bp_fill != 1 for their L0 bp's. Therefore they can't
