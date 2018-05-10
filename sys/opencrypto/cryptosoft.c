@@ -61,8 +61,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include "cryptodev_if.h"
 
-#include <opencrypto/ccm-cbc.h>
-
 static	int32_t swcr_id;
 static	struct swcr_data **swcr_sessions = NULL;
 static	u_int32_t swcr_sesnum;
