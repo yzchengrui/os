@@ -61,8 +61,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include "cryptodev_if.h"
 
-#include <opencrypto/ccm-cbc.h>
-
 static	int32_t swcr_id;
 static	struct swcr_data **swcr_sessions = NULL;
 static	u_int32_t swcr_sesnum;
@@ -546,7 +544,6 @@ swcr_authenc(struct cryptop *crp)
 	}
 
 	if (swa) {
-		struct aes_cbc_mac_ctx *a = (void*)&ctx;
 		switch (swa->sw_alg) {
 		case CRYPTO_AES_128_CCM_CBC_MAC:
 		case CRYPTO_AES_192_CCM_CBC_MAC:
@@ -556,8 +553,8 @@ swcr_authenc(struct cryptop *crp)
 			 * both the auth data, and payload data, before
 			 * doing the auth computation.
 			 */
-			a->authDataLength = crda->crd_len;
-			a->cryptDataLength = crde->crd_len;
+			ctx.aes_cbc_mac_ctx.authDataLength = crda->crd_len;
+			ctx.aes_cbc_mac_ctx.cryptDataLength = crde->crd_len;
 			break;
 		}
 	}
