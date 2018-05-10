@@ -431,7 +431,8 @@ zio_do_crypt_uio_opencrypto(boolean_t encrypt, uint64_t crypt,
 	int ret;
 
 	ci = &zio_crypt_table[crypt];
-	if (ci->ci_crypt_type != ZC_TYPE_GCM)
+	if (ci->ci_crypt_type != ZC_TYPE_GCM &&
+	    ci->ci_crypt_type != ZC_TYPE_CCM)
 		return (ENOTSUP);
 
 
