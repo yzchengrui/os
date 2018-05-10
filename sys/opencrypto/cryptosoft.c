@@ -61,6 +61,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include "cryptodev_if.h"
 
+#include <opencrypto/ccm-cbc.h>
+
 static	int32_t swcr_id;
 static	struct swcr_data **swcr_sessions = NULL;
 static	u_int32_t swcr_sesnum;
@@ -488,6 +490,7 @@ swcr_authenc(struct cryptop *crp)
 			isccm = 1;
 		case CRYPTO_AES_NIST_GCM_16:
 		case CRYPTO_AES_NIST_GMAC:
+		case CRYPTO_AES_CCM_16:
 			swe = sw;
 			crde = crd;
 			exf = swe->sw_exf;
@@ -500,6 +503,9 @@ swcr_authenc(struct cryptop *crp)
 		case CRYPTO_AES_128_NIST_GMAC:
 		case CRYPTO_AES_192_NIST_GMAC:
 		case CRYPTO_AES_256_NIST_GMAC:
+		case CRYPTO_AES_128_CCM_CBC_MAC:
+		case CRYPTO_AES_192_CCM_CBC_MAC:
+		case CRYPTO_AES_256_CCM_CBC_MAC:
 			swa = sw;
 			crda = crd;
 			axf = swa->sw_axf;
