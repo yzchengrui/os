@@ -4618,6 +4618,8 @@ opencrypto/gfmult.c		optional crypto | ipsec | ipsec_support
 opencrypto/rmd160.c		optional crypto | ipsec | ipsec_support
 opencrypto/skipjack.c		optional crypto | ipsec | ipsec_support
 opencrypto/xform.c		optional crypto | ipsec | ipsec_support
+opencrypto/ccm-cbc.c		optional crypto
+opencrypto/xform_cbc_mac.c	optional crypto
 rpc/auth_none.c			optional krpc | nfslockd | nfscl | nfsd
 rpc/auth_unix.c			optional krpc | nfslockd | nfscl | nfsd
 rpc/authunix_prot.c		optional krpc | nfslockd | nfscl | nfsd

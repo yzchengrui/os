@@ -79,6 +79,8 @@
 #define	MD5_KPDK_HASH_LEN	16
 #define	SHA1_KPDK_HASH_LEN	20
 #define	AES_GMAC_HASH_LEN	16
+#define	AES_CBC_MAC_HASH_LEN	16
+
 /* Maximum hash algorithm result length */
 #define	HASH_MAX_LEN		SHA2_512_HASH_LEN /* Keep this updated */
 
@@ -105,6 +107,9 @@
 #define	AES_128_GMAC_KEY_LEN		16
 #define	AES_192_GMAC_KEY_LEN		24
 #define	AES_256_GMAC_KEY_LEN		32
+#define	AES_128_CBC_MAC_KEY_LEN		16
+#define	AES_192_CBC_MAC_KEY_LEN		24
+#define	AES_256_CBC_MAC_KEY_LEN		32
 
 /* Encryption algorithm block sizes */
 #define	NULL_BLOCK_LEN		4	/* IPsec to maintain alignment */
@@ -184,7 +189,11 @@
 #define	CRYPTO_AES_128_NIST_GMAC 26 /* auth side */
 #define	CRYPTO_AES_192_NIST_GMAC 27 /* auth side */
 #define	CRYPTO_AES_256_NIST_GMAC 28 /* auth side */
-#define	CRYPTO_ALGORITHM_MAX	28 /* Keep updated - see below */
+#define	CRYPTO_AES_CCM_16	29	/* cipher side */
+#define	CRYPTO_AES_128_CCM_CBC_MAC	30	/* auth side */
+#define	CRYPTO_AES_192_CCM_CBC_MAC	31	/* auth side */
+#define	CRYPTO_AES_256_CCM_CBC_MAC	32	/* auth side */
+#define	CRYPTO_ALGORITHM_MAX	32 /* Keep updated - see below */
 
 #define	CRYPTO_ALGO_VALID(x)	((x) >= CRYPTO_ALGORITHM_MIN && \
 				 (x) <= CRYPTO_ALGORITHM_MAX)
