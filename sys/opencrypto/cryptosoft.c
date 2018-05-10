@@ -512,7 +512,8 @@ swcr_authenc(struct cryptop *crp)
 	if (crde == NULL || crda == NULL)
 		return (EINVAL);
 
-	if (crde->crd_alg == CRYPTO_AES_NIST_GCM_16 &&
+	if ((crde->crd_alg == CRYPTO_AES_NIST_GCM_16 ||
+	     crde->crd_alg == CRYPTO_AES_CCM_16) &&
 	    (crde->crd_flags & CRD_F_IV_EXPLICIT) == 0)
 		return (EINVAL);
 

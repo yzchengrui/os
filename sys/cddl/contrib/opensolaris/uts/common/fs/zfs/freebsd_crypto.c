@@ -157,7 +157,7 @@ freebsd_crypt_uio(boolean_t encrypt,
 	struct cryptoini cria, crie, *crip;
 	struct cryptop *crp;
 	struct cryptodesc *crd, *enc_desc, *auth_desc;
-	struct enc_xform *xform = &enc_xform_aes_nist_gcm;
+	struct enc_xform *xform;
 	struct auth_hash *xauth;
 	iovec_t *last_iovec;
 	uint64_t sid;
@@ -184,37 +184,53 @@ freebsd_crypt_uio(boolean_t encrypt,
 	}
 	data_uio->uio_resid = total;
 #endif
-
-	/* Only GCM is supported for the moment */
-	if (c_info->ci_crypt_type != ZC_TYPE_GCM) {
+	switch (c_info->ci_crypt_type) {
+	case ZC_TYPE_GCM:
+		xform = &enc_xform_aes_nist_gcm;
+		switch (key->ck_length/8) {
+		case AES_128_GMAC_KEY_LEN:
+			xauth = &auth_hash_nist_gmac_aes_128;
+			break;
+		case AES_192_GMAC_KEY_LEN:
+			xauth = &auth_hash_nist_gmac_aes_192;
+			break;
+		case AES_256_GMAC_KEY_LEN:
+			xauth = &auth_hash_nist_gmac_aes_256;
+			break;
+		default:
+			error = EINVAL;
+			goto bad;
+		}
+		break;
+	case ZC_TYPE_CCM:
+		xform = &enc_xform_ccm;
+		switch (key->ck_length/8) {
+		case CRYPTO_AES_128_CCM_CBC_MAC:
+			xauth = &auth_hash_ccm_cbc_mac_128;
+			break;
+		case CRYPTO_AES_192_CCM_CBC_MAC:
+			xauth = &auth_hash_ccm_cbc_mac_192;
+			break;
+		case CRYPTO_AES_256_CCM_CBC_MAC:
+			xauth = &auth_hash_ccm_cbc_mac_256;
+			break;
+		default:
+			error = EINVAL;
+			goto bad;
+			break;
+		}
+		break;
+	default:
 		error = ENOTSUP;
 		goto bad;
 	}
 
-	/* This is only valid for GCM */
-	switch (ZIO_DATA_MAC_LEN) {
-	case AES_128_GMAC_KEY_LEN:
 #ifdef FCRYPTO_DEBUG
-		printf("%s(%d): Using 128 GMAC\n", __FUNCTION__, __LINE__);
+	printf("%s(%d): Using crypt %s (key length %u [%u bytes]), auth %s (key length %d)\n",
+	       __FUNCTION__, __LINE__,
+	       xform->name, (unsigned int)key->ck_length, (unsigned int)key->ck_length/8,
+	       xauth->name, xauth->keysize);
 #endif
-		xauth = &auth_hash_nist_gmac_aes_128;
-		break;
-	case AES_192_GMAC_KEY_LEN:
-#ifdef FCRYPTO_DEBUG
-		printf("%s(%d): Using 192 GMAC\n", __FUNCTION__, __LINE__);
-#endif
-		xauth = &auth_hash_nist_gmac_aes_192;
-		break;
-	case AES_256_GMAC_KEY_LEN:
-#ifdef FCRYPTO_DEBUG
-		printf("%s(%d): Using 256 GMAC\n", __FUNCTION__, __LINE__);
-#endif
-		xauth = &auth_hash_nist_gmac_aes_256;
-		break;
-	default:
-		error = EINVAL;
-		goto bad;
-	}
 
 	bzero(&crie, sizeof(crie));
 	bzero(&cria, sizeof(cria));
@@ -225,24 +241,11 @@ freebsd_crypt_uio(boolean_t encrypt,
 	bcopy(ivbuf, crie.cri_iv, ZIO_DATA_IV_LEN);
 
 	cria.cri_alg = xauth->type;
-#if 0
-	cria.cri_klen = key->ck_length;
-	cria.cri_key = key->ck_data;
-	bcopy(ivbuf, cria.cri_iv, ZIO_DATA_IV_LEN);
-	cria.cri_next = &crie;
-#else
-# if 0
-	uint8_t stupid_empty_auth_key[ZIO_DATA_MAC_LEN] = { 0 };
-	cria.cri_klen = ZIO_DATA_MAC_LEN * 8;
-	cria.cri_key = stupid_empty_auth_key;
-# else
 	// The tag is always last in the uio
 	last_iovec = data_uio->uio_iov + (data_uio->uio_iovcnt - 1);
-	cria.cri_klen = last_iovec->iov_len * 8;
-	cria.cri_key = last_iovec->iov_base;
-# endif
-
-#endif
+	cria.cri_key = key->ck_data;
+	cria.cri_klen = key->ck_length;
+	
 	if (encrypt) {
 		crie.cri_next = &cria;
 		cria.cri_next = NULL;
