@@ -439,7 +439,9 @@ cryptof_ioctl(
 		case CRYPTO_AES_NIST_GCM_16:
 			txform = &enc_xform_aes_nist_gcm;
  			break;
-
+		case CRYPTO_AES_CCM_16:
+			txform = &enc_xform_ccm;
+			break;
 		default:
 			CRYPTDEB("invalid cipher");
 			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);
@@ -477,6 +479,15 @@ cryptof_ioctl(
 			thash = &auth_hash_nist_gmac_aes_256;
 			break;
 
+		case CRYPTO_AES_128_CCM_CBC_MAC:
+			thash = &auth_hash_ccm_cbc_mac_128;
+			break;
+		case CRYPTO_AES_192_CCM_CBC_MAC:
+			thash = &auth_hash_ccm_cbc_mac_192;
+			break;
+		case CRYPTO_AES_256_CCM_CBC_MAC:
+			thash = &auth_hash_ccm_cbc_mac_256;
+			break;
 #ifdef notdef
 		case CRYPTO_MD5:
 			thash = &auth_hash_md5;
