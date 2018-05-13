@@ -15,15 +15,16 @@ xor_and_encrypt(struct aes_cbc_mac_ctx *ctx,
 {
 	const uint64_t *b1;
 	uint64_t *b2;
+	uint64_t temp_block[CCM_CBC_BLOCK_LEN/sizeof(uint64_t)];
 	b1 = (const uint64_t*)src;
 	b2 = (uint64_t*)dst;
 
 	for (size_t count = 0;
 	     count < CCM_CBC_BLOCK_LEN/sizeof(uint64_t);
 	     count++) {
-		*b2++ ^= *b1++;
+		temp_block[count] = b1[count] ^ b2[count];
 	}
-	rijndaelEncrypt(ctx->keysched, ctx->rounds, dst, dst);
+	rijndaelEncrypt(ctx->keysched, ctx->rounds, (void*)temp_block, dst);
 }
 
 void
@@ -36,8 +37,7 @@ AES_CBC_MAC_Init(struct aes_cbc_mac_ctx *ctx)
 void
 AES_CBC_MAC_Setkey(struct aes_cbc_mac_ctx *ctx, const uint8_t *key, uint16_t klen)
 {
-	ctx->aes_key = key;
-	ctx->keyLength = klen * 8;
+	ctx->rounds = rijndaelKeySetupEnc(ctx->keysched, key, klen * 8);
 	return;
 }
 
@@ -76,11 +76,11 @@ AES_CBC_MAC_Reinit(struct aes_cbc_mac_ctx *ctx, const uint8_t *nonce, uint16_t n
 	 * length is whatever is left in the 16 bytes
 	 * after specifying flags and the nonce.
 	 */
-	L = 16 - nonceLen - 1;
+	L = (15 - nonceLen) & 0xff;
 	
 	flags = (ctx->authDataLength > 0) * 64 +
 		((ctx->tagLength-2) / 2) * 8 +
-		L;
+		L - 1;
 	/*
 	 * Now we need to set up the first block,
 	 * which has flags, nonce, and the message length.
@@ -97,9 +97,7 @@ AES_CBC_MAC_Reinit(struct aes_cbc_mac_ctx *ctx, const uint8_t *nonce, uint16_t n
 		tmp >>= 8;
 	}
 	/* Now need to encrypt b0 */
-	ctx->rounds = rijndaelKeySetupEnc(ctx->keysched, ctx->aes_key, ctx->keyLength);
 	rijndaelEncrypt(ctx->keysched, ctx->rounds, b0, ctx->block);
-
 	/* If there is auth data, we need to set up the staging block */
 	if (ctx->authDataLength) {
 		if (ctx->authDataLength < ((1<<16) - (1<<8))) {
@@ -182,7 +180,7 @@ AES_CBC_MAC_Update(struct aes_cbc_mac_ctx *ctx, const uint8_t *data, uint16_t le
 			explicit_bzero(ctx->staging_block, sizeof(ctx->staging_block));
 			bcopy(data, ctx->staging_block, length);
 			ptr = ctx->staging_block;
-			length -= length;
+			length = 0;
 		} else {
 			ptr = data;
 			length -= sizeof(ctx->block);
@@ -198,7 +196,7 @@ AES_CBC_MAC_Final(uint8_t *buf, struct aes_cbc_mac_ctx *ctx)
 	uint8_t s0[CCM_CBC_BLOCK_LEN];
 	
 	explicit_bzero(s0, sizeof(s0));
-	s0[0] = 16 - ctx->nonceLength - 1;
+	s0[0] = ((15 - ctx->nonceLength) & 0xff) - 1;
 	bcopy(ctx->nonce, s0+1, ctx->nonceLength);
 	rijndaelEncrypt(ctx->keysched, ctx->rounds, s0, s0);
 	for (size_t indx = 0; indx < ctx->tagLength; indx++)

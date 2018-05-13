@@ -471,6 +471,7 @@ swcr_authenc(struct cryptop *crp)
 	caddr_t buf = (caddr_t)crp->crp_buf;
 	uint32_t *blkp;
 	int aadlen, blksz, i, ivlen, len, iskip, oskip, r;
+	int isccm = 0;
 
 	ivlen = blksz = iskip = oskip = 0;
 
@@ -483,20 +484,22 @@ swcr_authenc(struct cryptop *crp)
 			return (EINVAL);
 
 		switch (sw->sw_alg) {
+		case CRYPTO_AES_CCM_16:
+			isccm = 1;
 		case CRYPTO_AES_NIST_GCM_16:
 		case CRYPTO_AES_NIST_GMAC:
-		case CRYPTO_AES_CCM_16:
 			swe = sw;
 			crde = crd;
 			exf = swe->sw_exf;
 			ivlen = 12;
 			break;
-		case CRYPTO_AES_128_NIST_GMAC:
-		case CRYPTO_AES_192_NIST_GMAC:
-		case CRYPTO_AES_256_NIST_GMAC:
 		case CRYPTO_AES_128_CCM_CBC_MAC:
 		case CRYPTO_AES_192_CCM_CBC_MAC:
 		case CRYPTO_AES_256_CCM_CBC_MAC:
+			isccm = 1;
+		case CRYPTO_AES_128_NIST_GMAC:
+		case CRYPTO_AES_192_NIST_GMAC:
+		case CRYPTO_AES_256_NIST_GMAC:
 			swa = sw;
 			crda = crd;
 			axf = swa->sw_axf;
@@ -586,11 +589,16 @@ swcr_authenc(struct cryptop *crp)
 		crypto_copydata(crp->crp_flags, buf, crde->crd_skip + i, len,
 		    blk);
 		if (crde->crd_flags & CRD_F_ENCRYPT) {
+			if (isccm)
+				axf->Update(&ctx, blk, len);
 			exf->encrypt(swe->sw_kschedule, blk);
-			axf->Update(&ctx, blk, len);
+			if (!isccm)
+				axf->Update(&ctx, blk, len);
 			crypto_copyback(crp->crp_flags, buf,
 			    crde->crd_skip + i, len, blk);
 		} else {
+			if (isccm)
+				exf->decrypt(swe->sw_kschedule, blk);
 			axf->Update(&ctx, blk, len);
 		}
 	}
@@ -621,6 +629,8 @@ swcr_authenc(struct cryptop *crp)
 		r = timingsafe_bcmp(aalg, uaalg, axf->hashsize);
 		if (r == 0) {
 			/* tag matches, decrypt data */
+			if (isccm && exf->reinit)
+				exf->reinit(swe->sw_kschedule, iv);
 			for (i = 0; i < crde->crd_len; i += blksz) {
 				len = MIN(crde->crd_len - i, blksz);
 				if (len < blksz)

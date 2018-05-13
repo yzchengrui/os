@@ -129,6 +129,7 @@
 
 #define	ARC4_IV_LEN		1
 #define	AES_GCM_IV_LEN		12
+#define	AES_CCM_IV_LEN		12
 #define	AES_XTS_IV_LEN		8
 #define	AES_XTS_ALPHA		0x87	/* GF(2^128) generator polynomial */
 
