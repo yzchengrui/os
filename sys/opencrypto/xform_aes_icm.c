@@ -123,7 +123,7 @@ aes_ccm_reinit(caddr_t key, u_int8_t *iv)
 
 	/* CCM has flags, then the IV, then the counter, which starts at 1 */
 	bzero(ctx->ac_block, sizeof(ctx->ac_block));
-	ctx->ac_block[0] = 3;	/* 4 bytes for length field; this gives a nonce of 12 bytes */
+	ctx->ac_block[0] = (15 - AES_CCM_IV_LEN) - 1;	/* 3 bytes for length field; this gives a nonce of 12 bytes */
 	bcopy(iv, ctx->ac_block+1, AES_GCM_IV_LEN);
 	ctx->ac_block[AESICM_BLOCKSIZE - 1] = 1;
 }
