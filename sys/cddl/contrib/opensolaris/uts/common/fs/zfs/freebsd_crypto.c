@@ -246,15 +246,9 @@ freebsd_crypt_uio(boolean_t encrypt,
 	cria.cri_key = key->ck_data;
 	cria.cri_klen = key->ck_length;
 	
-	if (encrypt) {
-		crie.cri_next = &cria;
-		cria.cri_next = NULL;
-		crip = &crie;
-	} else {
-		cria.cri_next = &crie;
-		crie.cri_next = NULL;
-		crip = &cria;
-	}
+	cria.cri_next = &crie;
+	crie.cri_next = NULL;
+	crip = &cria;
 	// Everything else is bzero'd
 	
 	error = crypto_newsession(&sid, crip, CRYPTOCAP_F_HARDWARE | CRYPTOCAP_F_SOFTWARE);
