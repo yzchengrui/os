@@ -77,12 +77,15 @@ typedef struct hmac_ctx {
  * The only algorithm ZFS uses for hashing is SHA512_HMAC.
  */
 void crypto_mac(const crypto_key_t *key, const void *in_data, size_t in_data_size,
-		void *out_data, size_t out_data_size);
+    void *out_data, size_t out_data_size);
 void crypto_mac_init(struct hmac_ctx *ctx, const crypto_key_t *key);
 void crypto_mac_update(struct hmac_ctx *ctx, const void *data, size_t data_size);
 void crypto_mac_final(struct hmac_ctx *ctx, void *out_data, size_t out_data_size);
 
-int freebsd_crypt_uio(boolean_t, struct zio_crypt_info *, uio_t *,
-					  crypto_key_t *, uint8_t *, size_t, size_t);
+int freebsd_crypt_newsession(uint64_t *sessp, struct zio_crypt_info *, crypto_key_t *);
+void freebsd_crypt_freesession(uint64_t sess);
+
+int freebsd_crypt_uio(boolean_t, uint64_t *, struct zio_crypt_info *,
+    uio_t *, crypto_key_t *, uint8_t *, size_t, size_t);
 
 #endif /* _ZFS_FREEBSD_CRYPTO_H */
