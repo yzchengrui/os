@@ -257,7 +257,10 @@ bad:
 void
 freebsd_crypt_freesession(uint64_t sess)
 {
+#ifdef _KERNEL
 	crypto_freesession(sess);
+#endif
+	return;
 }
 
 /*
@@ -420,6 +423,6 @@ bad:
 		printf("%s: returning error %d\n", __FUNCTION__, error);
 #endif
 	return (error);
-#endif
-	return (-1);
+#endif /* _KERNEL */
+	return (ENOTSUP);
 }
