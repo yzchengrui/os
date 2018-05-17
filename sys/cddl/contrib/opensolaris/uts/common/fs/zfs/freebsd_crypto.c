@@ -158,6 +158,7 @@ freebsd_crypt_newsession(uint64_t *sessp,
 			 struct zio_crypt_info *c_info,
 			 crypto_key_t *key)
 {
+#ifdef _KERNEL
 	struct cryptoini cria, crie, *crip;
 	struct enc_xform *xform;
 	struct auth_hash *xauth;
@@ -245,11 +246,12 @@ freebsd_crypt_newsession(uint64_t *sessp,
 		goto bad;
 	}
 	*sessp = sid;
-#ifdef _KERNEL
 	crypt_sessions++;
-#endif
 bad:
 	return (error);
+#else
+	return (ENOTSUP);
+#endif
 }
 
 void
