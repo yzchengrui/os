@@ -105,7 +105,10 @@ typedef struct zio_crypt_key {
 	/* illumos crypto api current encryption key */
 	crypto_key_t zk_current_key;
 
-#ifndef __FreeBSD__
+#ifdef __FreeBSD__
+	/* Session for current encrpytion key.  Must always be set */
+	uint64_t	zk_session;
+#else
 	/* template of current encryption key for illumos crypto api */
 	crypto_ctx_template_t zk_current_tmpl;
 #endif

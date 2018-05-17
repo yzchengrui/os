@@ -240,7 +240,9 @@ zio_crypt_key_destroy(zio_crypt_key_t *key)
 	rw_destroy(&key->zk_salt_lock);
 
 	/* free crypto templates */
-#ifndef __FreeBSD__
+#ifdef __FreeBSD__
+	freebsd_crypt_freesession(key->zk_session);
+#else
 	crypto_destroy_ctx_template(key->zk_current_tmpl);
 	crypto_destroy_ctx_template(key->zk_hmac_tmpl);
 #endif
@@ -254,10 +256,18 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	int ret;
 	crypto_mechanism_t mech;
 	uint_t keydata_len;
-
+	zio_crypt_info_t *ci = NULL;
+	
 	ASSERT(key != NULL);
 	ASSERT3U(crypt, <, ZIO_CRYPT_FUNCTIONS);
 
+#ifdef __FreeBSD__
+	ci = &zio_crypt_table[crypt];
+	if (ci->ci_crypt_type != ZC_TYPE_GCM &&
+	    ci->ci_crypt_type != ZC_TYPE_CCM)
+		return (ENOTSUP);
+#endif
+	
 	keydata_len = zio_crypt_table[crypt].ci_keylen;
 	bzero(key, sizeof (zio_crypt_key_t));
 
@@ -294,7 +304,17 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	key->zk_hmac_key.ck_data = &key->zk_hmac_key;
 	key->zk_hmac_key.ck_length = CRYPTO_BYTES2BITS(SHA512_HMAC_KEYLEN);
 
-#ifndef __FreeBSD__
+#ifdef __FreeBSD__
+	ci = &zio_crypt_table[crypt];
+	if (ci->ci_crypt_type != ZC_TYPE_GCM &&
+	    ci->ci_crypt_type != ZC_TYPE_CCM)
+		return (ENOTSUP);
+
+	ret = freebsd_crypt_newsession(&key->zk_session, ci, &key->zk_current_key);
+	if (ret)
+		goto error;
+					 
+#else
 	/*
 	 * Initialize the crypto templates. It's ok if this fails because
 	 * this is just an optimization.
@@ -354,7 +374,13 @@ zio_crypt_key_change_salt(zio_crypt_key_t *key)
 	bcopy(salt, key->zk_salt, ZIO_DATA_SALT_LEN);
 	key->zk_salt_count = 0;
 
-#ifndef __FreeBSD__
+#ifdef __FreeBSD__
+	freebsd_crypt_freesession(key->zk_session);
+	ret = freebsd_crypt_newsession(&key->zk_session,
+	    &zio_crypt_table[key->zk_crypt], &key->zk_current_key);
+	if (ret != 0)
+		goto out_unlock;
+#else
 	/* destroy the old context template and create the new one */
 	crypto_destroy_ctx_template(key->zk_current_tmpl);
 	ret = crypto_create_ctx_template(&mech, &key->zk_current_key,
@@ -423,7 +449,7 @@ error:
  * 
  */
 static int
-zio_do_crypt_uio_opencrypto(boolean_t encrypt, uint64_t crypt,
+zio_do_crypt_uio_opencrypto(boolean_t encrypt, uint64_t *sess, uint64_t crypt,
     crypto_key_t *key, uint8_t *ivbuf, uint_t datalen,
     uio_t *uio, uint_t auth_len)
 {
@@ -436,7 +462,7 @@ zio_do_crypt_uio_opencrypto(boolean_t encrypt, uint64_t crypt,
 		return (ENOTSUP);
 
 
-	ret = freebsd_crypt_uio(encrypt, ci, uio, key, ivbuf,
+	ret = freebsd_crypt_uio(encrypt, sess, ci, uio, key, ivbuf,
 				datalen, auth_len);
 	if (ret != 0) {
 #ifdef FCRYPTO_DEBUG
@@ -652,7 +678,7 @@ zio_crypt_key_wrap(crypto_key_t *cwkey, zio_crypt_key_t *key, uint8_t *iv,
 #endif
 	/* encrypt the keys and store the resulting ciphertext and mac */
 #ifdef __FreeBSD__
-	ret = zio_do_crypt_uio_opencrypto(B_TRUE, crypt, cwkey,
+	ret = zio_do_crypt_uio_opencrypto(B_TRUE, NULL, crypt, cwkey,
 	    iv, enc_len, &cuio, aad_len);
 #else
 	ret = zio_do_crypt_uio(B_TRUE, crypt, cwkey, NULL, iv, enc_len,
@@ -761,7 +787,7 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 #endif
 	/* decrypt the keys and store the result in the output buffers */
 #ifdef __FreeBSD__
-	ret = zio_do_crypt_uio_opencrypto(B_FALSE, crypt, cwkey,
+	ret = zio_do_crypt_uio_opencrypto(B_FALSE, NULL, crypt, cwkey,
 	    iv, enc_len, &cuio, aad_len);
 
 #else
@@ -792,7 +818,12 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	key->zk_hmac_key.ck_data = key->zk_hmac_keydata;
 	key->zk_hmac_key.ck_length = CRYPTO_BYTES2BITS(SHA512_HMAC_KEYLEN);
 
-#ifndef __FreeBSD__
+#ifdef __FreeBSD__
+	ret = freebsd_crypt_newsession(&key->zk_session,
+	    &zio_crypt_table[crypt], &key->zk_current_key);
+	if (ret != 0)
+		goto error;
+#else
 	/*
 	 * Initialize the crypto templates. It's ok if this fails because
 	 * this is just an optimization.
@@ -2224,7 +2255,11 @@ zio_do_crypt_data(boolean_t encrypt, zio_crypt_key_t *key, uint8_t *salt,
 	uio_t puio, cuio;
 	uint8_t enc_keydata[MASTER_KEY_MAX_LEN];
 	crypto_key_t tmp_ckey, *ckey = NULL;
+#ifdef __FreeBSD__
+	uint64_t *tmpl;
+#else
 	crypto_ctx_template_t tmpl;
+#endif
 	uint8_t *authbuf = NULL;
 
 	bzero(&puio, sizeof (uio_t));
@@ -2261,7 +2296,9 @@ zio_do_crypt_data(boolean_t encrypt, zio_crypt_key_t *key, uint8_t *salt,
 
 	if (bcmp(salt, key->zk_salt, ZIO_DATA_SALT_LEN) == 0) {
 		ckey = &key->zk_current_key;
-#ifndef __FreeBSD__
+#ifdef __FreeBSD__
+		tmpl = &key->zk_session;
+#else		
 		tmpl = key->zk_current_tmpl;
 #endif
 	} else {
@@ -2283,8 +2320,8 @@ zio_do_crypt_data(boolean_t encrypt, zio_crypt_key_t *key, uint8_t *salt,
 
 	/* perform the encryption / decryption */
 #ifdef __FreeBSD__
-	ret = zio_do_crypt_uio_opencrypto(encrypt, key->zk_crypt, ckey, iv,
-					  enc_len, &cuio, auth_len);
+	ret = zio_do_crypt_uio_opencrypto(encrypt, tmpl, key->zk_crypt, ckey, iv,
+	    enc_len, &cuio, auth_len);
 #else
 	ret = zio_do_crypt_uio(encrypt, key->zk_crypt, ckey, tmpl, iv, enc_len,
 	    &puio, &cuio, authbuf, auth_len);
