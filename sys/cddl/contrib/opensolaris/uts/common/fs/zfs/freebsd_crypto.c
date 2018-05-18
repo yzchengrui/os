@@ -405,12 +405,22 @@ freebsd_crypt_uio(boolean_t encrypt,
 		enc_desc->crd_flags |= CRD_F_ENCRYPT;
 	
 	crp->crp_callback = freebsd_zfs_crypt_done;
+again:
 	crp->crp_opaque = NULL;
 	error = crypto_dispatch(crp);
 	if (error == 0) {
 		while (crp->crp_opaque == NULL)
 			tsleep(crp, PRIBIO, "zfs_crypto", hz/5);
 		error = crp->crp_etype;
+		if (error == EAGAIN) {
+			/*
+			 * Session ID changed, so we should record that, and try again
+			 */
+			sid = crp->crp_sid;
+			if (sessp)
+				*sessp = sid;
+			goto again;
+		}
 	}
 	if (crp)
 		crypto_freereq(crp);
