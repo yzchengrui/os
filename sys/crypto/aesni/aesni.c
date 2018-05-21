@@ -109,7 +109,7 @@ aesni_probe(device_t dev)
 		return (EINVAL);
 	}
 
-	device_set_desc_copy(dev, "AES-CBC,AES-XTS,AES-GCM,AES-ICM");
+	device_set_desc_copy(dev, "AES-CBC,AES-XTS,AES-GCM,AES-CCM,AES-ICM");
 	return (0);
 }
 
@@ -168,6 +168,11 @@ aesni_attach(device_t dev)
 	crypto_register(sc->cid, CRYPTO_AES_192_NIST_GMAC, 0, 0);
 	crypto_register(sc->cid, CRYPTO_AES_256_NIST_GMAC, 0, 0);
 	crypto_register(sc->cid, CRYPTO_AES_XTS, 0, 0);
+	crypto_register(sc->cid, CRYPTO_AES_CCM_16, 0, 0);
+	crypto_register(sc->cid, CRYPTO_AES_128_CCM_CBC_MAC, 0, 0);
+	crypto_register(sc->cid, CRYPTO_AES_192_CCM_CBC_MAC, 0, 0);
+	crypto_register(sc->cid, CRYPTO_AES_256_CCM_CBC_MAC, 0, 0);
+			
 	return (0);
 }
 
@@ -228,6 +233,7 @@ aesni_newsession(device_t dev, uint32_t *sidp, struct cryptoini *cri)
 		case CRYPTO_AES_ICM:
 		case CRYPTO_AES_XTS:
 		case CRYPTO_AES_NIST_GCM_16:
+		case CRYPTO_AES_CCM_16:
 			if (encini != NULL) {
 				CRYPTDEB("encini already set");
 				return (EINVAL);
@@ -237,6 +243,9 @@ aesni_newsession(device_t dev, uint32_t *sidp, struct cryptoini *cri)
 		case CRYPTO_AES_128_NIST_GMAC:
 		case CRYPTO_AES_192_NIST_GMAC:
 		case CRYPTO_AES_256_NIST_GMAC:
+		case CRYPTO_AES_128_CCM_CBC_MAC:
+		case CRYPTO_AES_192_CCM_CBC_MAC:
+		case CRYPTO_AES_256_CCM_CBC_MAC:
 			/*
 			 * nothing to do here, maybe in the future cache some
 			 * values for GHASH
@@ -362,6 +371,7 @@ aesni_process(device_t dev, struct cryptop *crp, int hint __unused)
 			break;
 
 		case CRYPTO_AES_NIST_GCM_16:
+		case CRYPTO_AES_CCM_16:
 			if (enccrd != NULL) {
 				error = EINVAL;
 				goto out;
@@ -373,6 +383,9 @@ aesni_process(device_t dev, struct cryptop *crp, int hint __unused)
 		case CRYPTO_AES_128_NIST_GMAC:
 		case CRYPTO_AES_192_NIST_GMAC:
 		case CRYPTO_AES_256_NIST_GMAC:
+		case CRYPTO_AES_128_CCM_CBC_MAC:
+		case CRYPTO_AES_192_CCM_CBC_MAC:
+		case CRYPTO_AES_256_CCM_CBC_MAC:
 			if (authcrd != NULL) {
 				error = EINVAL;
 				goto out;
@@ -526,6 +539,7 @@ aesni_cipher_process(struct aesni_session *ses, struct cryptodesc *enccrd,
 	encflag = (enccrd->crd_flags & CRD_F_ENCRYPT) == CRD_F_ENCRYPT;
 
 	if ((enccrd->crd_alg == CRYPTO_AES_ICM ||
+	     enccrd->crd_alg == CRYPTO_AES_CCM_16 ||
 	    enccrd->crd_alg == CRYPTO_AES_NIST_GCM_16) &&
 	    (enccrd->crd_flags & CRD_F_IV_EXPLICIT) == 0)
 		return (EINVAL);
@@ -571,6 +585,7 @@ aesni_cipher_process(struct aesni_session *ses, struct cryptodesc *enccrd,
 		ivlen = 8;
 		break;
 	case CRYPTO_AES_NIST_GCM_16:
+	case CRYPTO_AES_CCM_16:
 		ivlen = 12;	/* should support arbitarily larger */
 		break;
 	}
@@ -597,7 +612,7 @@ aesni_cipher_process(struct aesni_session *ses, struct cryptodesc *enccrd,
 		crypto_copydata(crp->crp_flags, crp->crp_buf,
 		    authcrd->crd_inject, GMAC_DIGEST_LEN, tag);
 	else
-		bzero(tag, sizeof tag);
+		bzero(tag, sizeof(tag));
 
 	/* Do work */
 	switch (ses->algo) {
@@ -636,13 +651,25 @@ aesni_cipher_process(struct aesni_session *ses, struct cryptodesc *enccrd,
 				error = EBADMSG;
 		}
 		break;
+	case CRYPTO_AES_CCM_16:
+		if (encflag)
+			AES_CCM_encrypt(buf, buf, authbuf, iv, tag,
+			    enccrd->crd_len, authcrd->crd_len, ivlen,
+			    ses->enc_schedule, ses->rounds);
+		else {
+			if (!AES_CCM_decrypt(buf, buf, authbuf, iv, tag,
+			    enccrd->crd_len, authcrd->crd_len, ivlen,
+			    ses->enc_schedule, ses->rounds))
+				error = EBADMSG;
+		}
+		break;
 	}
 
 	if (allocated)
 		crypto_copyback(crp->crp_flags, crp->crp_buf, enccrd->crd_skip,
 		    enccrd->crd_len, buf);
 
-	if (!error && authcrd != NULL) {
+	if (!error && authcrd != NULL && encflag) {
 		crypto_copyback(crp->crp_flags, crp->crp_buf,
 		    authcrd->crd_inject, GMAC_DIGEST_LEN, tag);
 	}
