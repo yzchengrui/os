@@ -7,10 +7,16 @@ SRCS=	aesni.c
 SRCS+=	aeskeys_${MACHINE_CPUARCH}.S
 SRCS+=	device_if.h bus_if.h opt_bus.h cryptodev_if.h
 
-OBJS+=	aesni_ghash.o aesni_wrap.o
+OBJS+=	aesni_ghash.o aesni_wrap.o aesni_ccm.o
 
 # Remove -nostdinc so we can get the intrinsics.
 aesni_ghash.o: aesni_ghash.c
+	# XXX - gcc won't understand -mpclmul
+	${CC} -c ${CFLAGS:C/^-O2$/-O3/:N-nostdinc} ${WERROR} ${PROF} \
+	     -mmmx -msse -msse4 -maes -mpclmul ${.IMPSRC}
+	${CTFCONVERT_CMD}
+
+aesni_ccm.o: aesni_ccm.c
 	# XXX - gcc won't understand -mpclmul
 	${CC} -c ${CFLAGS:C/^-O2$/-O3/:N-nostdinc} ${WERROR} ${PROF} \
 	     -mmmx -msse -msse4 -maes -mpclmul ${.IMPSRC}
@@ -23,6 +29,7 @@ aesni_wrap.o: aesni_wrap.c
 
 aesni_ghash.o: aesni.h
 aesni_wrap.o: aesni.h
+aesni_ccm.o: aesni.h
 
 .include <bsd.kmod.mk>
 
