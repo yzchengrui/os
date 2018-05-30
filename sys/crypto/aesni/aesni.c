@@ -433,13 +433,45 @@ out:
 	return (error);
 }
 
+/*
+ * Find an iovec in the given uio that contains a
+ * <offset, length> vector.  To qualify, the vector
+ * must be entirely contained with a single iovec.
+ * If it is found, return the address; otherwise,
+ * return NULL.
+ */
+static void *
+find_vector(struct uio *uio, size_t start, size_t length)
+{
+	int indx;
+	size_t curr_offset = 0, end = start + length;
+
+	for (indx = 0;
+	     indx < uio->uio_iovcnt && curr_offset <= start;
+	     indx++) {
+		/*
+		 * See if <start, length> is in the range
+		 * of <curr_offset, uio->iov[indx].iov_len>
+		 */
+		struct iovec *iov = &uio->uio_iov[indx];
+		if (curr_offset <= start &&
+		    ((curr_offset + iov->iov_len) >= end)) {
+			size_t offset = start - curr_offset;
+			uint8_t *retval = iov->iov_base;
+			return (void*)(retval + offset);
+		}
+		curr_offset += iov->iov_len;
+	}
+	return NULL;
+			
+}
+
 uint8_t *
 aesni_cipher_alloc(struct cryptodesc *enccrd, struct cryptop *crp,
     int *allocated)
 {
 	struct mbuf *m;
 	struct uio *uio;
-	struct iovec *iov;
 	uint8_t *addr;
 
 	if (crp->crp_flags & CRYPTO_F_IMBUF) {
@@ -449,10 +481,18 @@ aesni_cipher_alloc(struct cryptodesc *enccrd, struct cryptop *crp,
 		addr = mtod(m, uint8_t *);
 	} else if (crp->crp_flags & CRYPTO_F_IOV) {
 		uio = (struct uio *)crp->crp_buf;
-		if (uio->uio_iovcnt != 1)
-			goto alloc;
-		iov = uio->uio_iov;
-		addr = (uint8_t *)iov->iov_base;
+		/*
+		 * If the data range we need is entirely
+		 * contained within one iovec, we should
+		 * use that, instead of trying to allocate
+		 * memory.
+		 */
+		addr = find_vector(uio, enccrd->crd_skip, enccrd->crd_len);
+		if (addr != NULL) {
+			*allocated = 0;
+			return (addr);
+		}
+		goto alloc;	
 	} else
 		addr = (uint8_t *)crp->crp_buf;
 	*allocated = 0;
