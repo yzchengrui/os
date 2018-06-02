@@ -2447,6 +2447,7 @@ dbuf_issue_final_prefetch(dbuf_prefetch_arg_t *dpa, blkptr_t *bp)
  * will either read in the next indirect block down the tree or issue the actual
  * prefetch if the next block down is our target.
  */
+/* ARGSUSED */
 static void
 dbuf_prefetch_indirect_done(zio_t *zio, const zbookmark_phys_t *zb, int err,
     const blkptr_t *iobp, arc_buf_t *abuf, void *private)
