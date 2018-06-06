@@ -138,14 +138,6 @@ typedef enum dmu_object_byteswap {
 
 #define	DMU_OT_IS_ENCRYPTED(ot) (((ot) & DMU_OT_NEWTYPE) ? \
 	((ot) & DMU_OT_ENCRYPTED) : \
-	DMU_OT_IS_ENCRYPTED_IMPL(ot))
-
-#define	DMU_OT_IS_ENCRYPTED(ot) (((ot) & DMU_OT_NEWTYPE) ? \
-	((ot) & DMU_OT_ENCRYPTED) : \
-	DMU_OT_IS_ENCRYPTED_IMPL(ot))
-
-#define	DMU_OT_IS_ENCRYPTED(ot) (((ot) & DMU_OT_NEWTYPE) ? \
-	((ot) & DMU_OT_ENCRYPTED) : \
 	dmu_ot[(int)(ot)].ot_encrypt)
 
 /*

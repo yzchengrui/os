@@ -500,13 +500,6 @@ swcr_authenc(struct cryptop *crp)
 		case CRYPTO_AES_128_NIST_GMAC:
 		case CRYPTO_AES_192_NIST_GMAC:
 		case CRYPTO_AES_256_NIST_GMAC:
-		case CRYPTO_AES_128_CCM_CBC_MAC:
-		case CRYPTO_AES_192_CCM_CBC_MAC:
-		case CRYPTO_AES_256_CCM_CBC_MAC:
-			isccm = 1;
-		case CRYPTO_AES_128_NIST_GMAC:
-		case CRYPTO_AES_192_NIST_GMAC:
-		case CRYPTO_AES_256_NIST_GMAC:
 			swa = sw;
 			crda = crd;
 			axf = swa->sw_axf;
