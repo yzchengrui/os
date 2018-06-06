@@ -127,12 +127,6 @@ struct objset {
 	/* os_phys_buf should be written raw next txg */
 	boolean_t os_next_write_raw[TXG_SIZE];
 
-	/* os_phys_buf should be written raw next txg */
-	boolean_t os_next_write_raw[TXG_SIZE];
-
-	/* os_phys_buf should be written raw next txg */
-	boolean_t os_next_write_raw[TXG_SIZE];
-
 	/* Protected by os_obj_lock */
 	kmutex_t os_obj_lock;
 	uint64_t os_obj_next;
