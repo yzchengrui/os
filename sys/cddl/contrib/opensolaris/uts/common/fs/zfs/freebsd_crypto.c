@@ -198,13 +198,13 @@ freebsd_crypt_newsession(uint64_t *sessp,
 	case ZC_TYPE_CCM:
 		xform = &enc_xform_ccm;
 		switch (key->ck_length/8) {
-		case CRYPTO_AES_128_CCM_CBC_MAC:
+		case AES_128_CBC_MAC_KEY_LEN:
 			xauth = &auth_hash_ccm_cbc_mac_128;
 			break;
-		case CRYPTO_AES_192_CCM_CBC_MAC:
+		case AES_192_CBC_MAC_KEY_LEN:
 			xauth = &auth_hash_ccm_cbc_mac_192;
 			break;
-		case CRYPTO_AES_256_CCM_CBC_MAC:
+		case AES_256_CBC_MAC_KEY_LEN:
 			xauth = &auth_hash_ccm_cbc_mac_256;
 			break;
 		default:

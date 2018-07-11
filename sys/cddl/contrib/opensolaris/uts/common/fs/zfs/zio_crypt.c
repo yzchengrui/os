@@ -270,6 +270,7 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	
 	keydata_len = zio_crypt_table[crypt].ci_keylen;
 	bzero(key, sizeof (zio_crypt_key_t));
+	rw_init(&key->zk_salt_lock, NULL, RW_DEFAULT, NULL);
 
 	/* fill keydata buffers and salt with random data */
 	ret = random_get_bytes((uint8_t *)&key->zk_guid, sizeof (uint64_t));
@@ -335,7 +336,6 @@ zio_crypt_key_init(uint64_t crypt, zio_crypt_key_t *key)
 	key->zk_crypt = crypt;
 	key->zk_version = ZIO_CRYPT_KEY_CURRENT_VERSION;
 	key->zk_salt_count = 0;
-	rw_init(&key->zk_salt_lock, NULL, RW_DEFAULT, NULL);
 
 	return (0);
 
@@ -722,6 +722,7 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	ASSERT3U(cwkey->ck_format, ==, CRYPTO_KEY_RAW);
 
 	keydata_len = zio_crypt_table[crypt].ci_keylen;
+	rw_init(&key->zk_salt_lock, NULL, RW_DEFAULT, NULL);
 
 #ifdef __FreeBSD__
 	/*
@@ -848,7 +849,6 @@ zio_crypt_key_unwrap(crypto_key_t *cwkey, uint64_t crypt, uint64_t version,
 	key->zk_version = version;
 	key->zk_guid = guid;
 	key->zk_salt_count = 0;
-	rw_init(&key->zk_salt_lock, NULL, RW_DEFAULT, NULL);
 
 	return (0);
 
