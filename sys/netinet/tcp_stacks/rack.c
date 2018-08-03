@@ -1627,7 +1627,6 @@ rack_process_rst(struct mbuf *m, struct tcphdr *th, struct socket *so, struct tc
 static void
 rack_challenge_ack(struct mbuf *m, struct tcphdr *th, struct tcpcb *tp, int32_t * ret_val)
 {
-
 	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
 
 	TCPSTAT_INC(tcps_badsyn);
@@ -4658,7 +4657,6 @@ rack_process_data(struct mbuf *m, struct tcphdr *th, struct socket *so,
 
 	rack = (struct tcp_rack *)tp->t_fb_ptr;
 	INP_WLOCK_ASSERT(tp->t_inpcb);
-
 	nsegs = max(1, m->m_pkthdr.lro_nsegs);
 	if ((thflags & TH_ACK) &&
 	    (SEQ_LT(tp->snd_wl1, th->th_seq) ||
@@ -4687,6 +4685,10 @@ rack_process_data(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		tp->snd_nxt = tp->snd_max;
 		/* Make sure we output to start the timer */
 		rack->r_wanted_output++;
+	}
+	if (tp->t_flags2 & TF2_DROP_AF_DATA) {
+		m_freem(m);
+		return (0);
 	}
 	/*
 	 * Process segments with URG.
@@ -6103,7 +6105,6 @@ rack_do_lastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		return (ret_val);
 	}
 	if (ourfinisacked) {
-
 		INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
 		tp = tcp_close(tp);
 		rack_do_drop(m, tp);
@@ -6657,10 +6658,19 @@ rack_hpts_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			    (to.to_flags & TOF_SACKPERM) == 0)
 				tp->t_flags &= ~TF_SACK_PERMIT;
 			if (IS_FASTOPEN(tp->t_flags)) {
-				if (to.to_flags & TOF_FASTOPEN)
-					tcp_fastopen_update_cache(tp, to.to_mss,
+				if (to.to_flags & TOF_FASTOPEN) {
+					uint16_t mss;
+
+					if (to.to_flags & TOF_MSS)
+						mss = to.to_mss;
+					else
+						if ((tp->t_inpcb->inp_vflag & INP_IPV6) != 0)
+							mss = TCP6_MSS;
+						else
+							mss = TCP_MSS;
+					tcp_fastopen_update_cache(tp, mss,
 					    to.to_tfo_len, to.to_tfo_cookie);
-				else
+				} else
 					tcp_fastopen_disable_path(tp);
 			}
 		}

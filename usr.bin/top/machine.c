@@ -388,7 +388,7 @@ format_header(const char *uname_field)
 		sbuf_printf(header, "%*s", ps.jail ? TOP_JID_LEN : 0,
 									ps.jail ? " JID" : "");
 		sbuf_printf(header, " %-*.*s  ", namelength, namelength, uname_field);
-		sbuf_cat(header, "THR PRI NICE  SIZE   RES ");
+		sbuf_cat(header, "THR PRI NICE   SIZE    RES ");
 		if (ps.swap) {
 			sbuf_printf(header, "%*s ", TOP_SWAP_LEN - 1, "SWAP");
 		}
@@ -985,13 +985,9 @@ format_next_process(struct handle * xhandle, char *(*get_userid)(int), int flags
 				if (*src == '\0')
 					continue;
 				len = (argbuflen - (dst - argbuf) - 1) / 4;
-				if (utf8flag) {
-					utf8strvisx(dst, src, MIN(strlen(src), len));
-				} else {
-					strvisx(dst, src,
-					    MIN(strlen(src), len),
-					    VIS_NL | VIS_CSTYLE);
-				}
+				strvisx(dst, src,
+				    MIN(strlen(src), len),
+				    VIS_NL | VIS_CSTYLE);
 				while (*dst != '\0')
 					dst++;
 				if ((argbuflen - (dst - argbuf) - 1) / 4 > 0)
@@ -1068,8 +1064,8 @@ format_next_process(struct handle * xhandle, char *(*get_userid)(int), int flags
 
 		sbuf_printf(procbuf, "%3d ", pp->ki_pri.pri_level - PZERO);
 		sbuf_printf(procbuf, "%4s", format_nice(pp));
-		sbuf_printf(procbuf, "%6s ", format_k(PROCSIZE(pp)));
-		sbuf_printf(procbuf, "%5s ", format_k(pagetok(pp->ki_rssize)));
+		sbuf_printf(procbuf, "%7s ", format_k(PROCSIZE(pp)));
+		sbuf_printf(procbuf, "%6s ", format_k(pagetok(pp->ki_rssize)));
 		if (ps.swap) {
 			sbuf_printf(procbuf, "%*s ",
 				TOP_SWAP_LEN - 1,

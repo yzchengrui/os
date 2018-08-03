@@ -78,7 +78,7 @@ static int in_difaddr_ioctl(u_long, caddr_t, struct ifnet *, struct thread *);
 static void	in_socktrim(struct sockaddr_in *);
 static void	in_purgemaddrs(struct ifnet *);
 
-static VNET_DEFINE(int, nosameprefix);
+VNET_DEFINE_STATIC(int, nosameprefix);
 #define	V_nosameprefix			VNET(nosameprefix)
 SYSCTL_INT(_net_inet_ip, OID_AUTO, no_same_prefix, CTLFLAG_VNET | CTLFLAG_RW,
 	&VNET_NAME(nosameprefix), 0,
@@ -1164,10 +1164,6 @@ in_lltable_free_entry(struct lltable *llt, struct llentry *lle)
 		IF_AFDATA_WLOCK_ASSERT(llt->llt_ifp);
 		lltable_unlink_entry(llt, lle);
 	}
-
-	/* cancel timer */
-	if (callout_stop(&lle->lle_timer) > 0)
-		LLE_REMREF(lle);
 
 	/* Drop hold queue */
 	pkts_dropped = llentry_free(lle);
