@@ -10,7 +10,9 @@ SUBDIR.yes+=	pmbr-datadisk
 
 SUBDIR.${MK_LOADER_FIREWIRE}+=	libfirewire
 
-SUBDIR.yes+=	loader
+SUBDIR.${MK_FORTH}+= loader_4th
+SUBDIR.${MK_LOADER_LUA}+= loader_lua
+SUBDIR.yes+=	loader_simp
 
 # special boot programs, 'self-extracting boot2+loader'
 SUBDIR.yes+=	pxeldr
