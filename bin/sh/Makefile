@@ -3,9 +3,7 @@
 
 .include <src.opts.mk>
 
-CONFS=	dot.profile profile
-CONFSDIR_dot.profile=	/root
-CONFSNAME_dot.profile=	.profile
+CONFS=	profile
 PACKAGE=runtime
 PROG=	sh
 INSTALLFLAGS= -S
@@ -37,7 +35,6 @@ WFORMAT=0
 
 CLEANFILES+= mknodes mksyntax
 CLEANFILES+= ${GENSRCS} ${GENHDRS}
-LINKS=	/root/.profile /.profile
 
 build-tools: mknodes mksyntax
 
@@ -63,8 +60,5 @@ token.h: mktokens
 
 HAS_TESTS=
 SUBDIR.${MK_TESTS}+= tests
-
-beforeinstall:
-	rm -f ${DESTDIR}/.profile
 
 .include <bsd.prog.mk>
