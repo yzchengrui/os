@@ -312,9 +312,10 @@ ENTRY(copyout_smap)
 	movsq
 	movb	%dl,%cl
 	andb	$7,%cl
+	je	1f
 	rep
 	movsb
-	clac
+1:	clac
 
 done_copyout:
 	xorl	%eax,%eax
@@ -361,6 +362,7 @@ ENTRY(copyin_nosmap)
 	movsq
 	movb	%al,%cl
 	andb	$7,%cl				/* copy remaining bytes */
+	je	done_copyin
 	rep
 	movsb
 
@@ -393,10 +395,10 @@ ENTRY(copyin_smap)
 	movsq
 	movb	%al,%cl
 	andb	$7,%cl				/* copy remaining bytes */
-	je	done_copyin
+	je	1f
 	rep
 	movsb
-	clac
+1:	clac
 
 done_copyin:
 	xorl	%eax,%eax
@@ -912,6 +914,8 @@ ENTRY(copyinstr_smap)
 	subq	%rsi,%rax
 	jbe	cpystrflt
 
+	stac
+
 	/* restrict maxlen to <= VM_MAXUSER_ADDRESS-from */
 	cmpq	%rdx,%rax
 	jae	1f
@@ -922,31 +926,19 @@ ENTRY(copyinstr_smap)
 
 2:
 	decq	%rdx
-	jz	copyinstr_toolong
+	jz	copyinstr_toolong_smap
 
-	stac
 	lodsb
 	stosb
-	clac
 	orb	%al,%al
 	jnz	2b
+
+	clac
 
 copyinstr_succ:
 	/* Success -- 0 byte reached */
 	decq	%rdx
 	xorl	%eax,%eax
-	jmp	cpystrflt_x
-copyinstr_toolong:
-	/* rdx is zero - return ENAMETOOLONG or EFAULT */
-	movq	$VM_MAXUSER_ADDRESS,%rax
-	cmpq	%rax,%rsi
-	jae	cpystrflt
-	movq	$ENAMETOOLONG,%rax
-	jmp	cpystrflt_x
-
-	/* Fault entry clears PSL.AC */
-cpystrflt:
-	movq	$EFAULT,%rax
 
 cpystrflt_x:
 	/* set *lencopied and return %eax */
@@ -960,6 +952,21 @@ cpystrflt_x:
 1:
 	POP_FRAME_POINTER
 	ret
+	/* Fault entry clears PSL.AC */
+cpystrflt:
+	movq	$EFAULT,%rax
+	jmp	cpystrflt_x
+
+copyinstr_toolong_smap:
+	clac
+copyinstr_toolong:
+	/* rdx is zero - return ENAMETOOLONG or EFAULT */
+	movq	$VM_MAXUSER_ADDRESS,%rax
+	cmpq	%rax,%rsi
+	jae	cpystrflt
+	movq	$ENAMETOOLONG,%rax
+	jmp	cpystrflt_x
+
 END(copyinstr_smap)
 
 /*
@@ -1225,3 +1232,36 @@ ENTRY(handle_ibrs_exit_rs)
 END(handle_ibrs_exit_rs)
 
 	.noaltmacro
+
+/*
+ * Flush L1D cache.  Load enough of the data from the kernel text
+ * to flush existing L1D content.
+ *
+ * N.B. The function does not follow ABI calling conventions, it corrupts %rbx.
+ * The vmm.ko caller expects that only %rax, %rdx, %rbx, %rcx, %r9, and %rflags
+ * registers are clobbered.  The NMI handler caller only needs %r13 preserved.
+ */
+ENTRY(flush_l1d_sw)
+#define	L1D_FLUSH_SIZE	(64 * 1024)
+	movq	$KERNBASE, %r9
+	movq	$-L1D_FLUSH_SIZE, %rcx
+	/*
+	 * pass 1: Preload TLB.
+	 * Kernel text is mapped using superpages.  TLB preload is
+	 * done for the benefit of older CPUs which split 2M page
+	 * into 4k TLB entries.
+	 */
+1:	movb	L1D_FLUSH_SIZE(%r9, %rcx), %al
+	addq	$PAGE_SIZE, %rcx
+	jne	1b
+	xorl	%eax, %eax
+	cpuid
+	movq	$-L1D_FLUSH_SIZE, %rcx
+	/* pass 2: Read each cache line. */
+2:	movb	L1D_FLUSH_SIZE(%r9, %rcx), %al
+	addq	$64, %rcx
+	jne	2b
+	lfence
+	ret
+#undef	L1D_FLUSH_SIZE
+END(flush_l1d_sw)
