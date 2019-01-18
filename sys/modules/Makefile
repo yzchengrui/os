@@ -205,6 +205,7 @@ SUBDIR=	\
 	${_ix} \
 	${_ixv} \
 	${_ixl} \
+	${_ixnvdimm} \
 	jme \
 	joy \
 	kbdmux \
@@ -287,7 +288,6 @@ SUBDIR=	\
 	nullfs \
 	${_ntb} \
 	${_nvd} \
-	${_nvdimm} \
 	${_nvme} \
 	${_nvram} \
 	oce \
@@ -721,11 +721,11 @@ _efirt=		efirt
 _ioat=		ioat
 _ixl=		ixl
 _ixlv=		ixlv
+_ixnvdimm=	ixnvdimm
 _linux64=	linux64
 _linux_common=	linux_common
 _ntb=		ntb
 _nvd=		nvd
-_nvdimm=	nvdimm
 .if ${MK_SOURCELESS_HOST} != "no"
 _nve=		nve
 .endif
