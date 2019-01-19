@@ -352,6 +352,10 @@ static int pg_ps_enabled = 1;
 SYSCTL_INT(_vm_pmap, OID_AUTO, pg_ps_enabled, CTLFLAG_RDTUN | CTLFLAG_NOFETCH,
     &pg_ps_enabled, 0, "Are large page mappings enabled?");
 
+static int disable_pmap_copy;
+SYSCTL_INT(_vm_pmap, OID_AUTO, disable_pmap_copy, CTLFLAG_RWTUN, &disable_pmap_copy, 0,
+    "disable pmap_copy optimization");
+
 #define	PAT_INDEX_SIZE	8
 static int pat_index[PAT_INDEX_SIZE];	/* cache mode to PAT index conversion */
 
@@ -5025,6 +5029,10 @@ pmap_copy(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len,
 	vm_offset_t end_addr = src_addr + len;
 	vm_offset_t va_next;
 	pt_entry_t PG_A, PG_M, PG_V;
+
+	if (disable_pmap_copy)
+		return;
+
 
 	if (dst_addr != src_addr)
 		return;
