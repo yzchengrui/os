@@ -3064,7 +3064,13 @@ tryagain:
 		    /*
 		     * This is where we can choose to issue a delegation.
 		     */
-		    if (delegate == 0 || writedeleg == 0 ||
+		    if ((new_stp->ls_flags & NFSLCK_WANTNODELEG) != 0)
+			*rflagsp |= NFSV4OPEN_WDNOTWANTED;
+		    else if (nfsrv_issuedelegs == 0)
+			*rflagsp |= NFSV4OPEN_WDSUPPFTYPE;
+		    else if (NFSRV_V4DELEGLIMIT(nfsrv_delegatecnt))
+			*rflagsp |= NFSV4OPEN_WDRESOURCE;
+		    else if (delegate == 0 || writedeleg == 0 ||
 			NFSVNO_EXRDONLY(exp) || (readonly != 0 &&
 			nfsrv_writedelegifpos == 0) ||
 			!NFSVNO_DELEGOK(vp) ||
@@ -3072,11 +3078,6 @@ tryagain:
 			(clp->lc_flags & (LCL_CALLBACKSON | LCL_CBDOWN)) !=
 			 LCL_CALLBACKSON)
 			*rflagsp |= NFSV4OPEN_WDCONTENTION;
-		    else if (nfsrv_issuedelegs == 0 ||
-			NFSRV_V4DELEGLIMIT(nfsrv_delegatecnt))
-			*rflagsp |= NFSV4OPEN_WDRESOURCE;
-		    else if ((new_stp->ls_flags & NFSLCK_WANTNODELEG) != 0)
-			*rflagsp |= NFSV4OPEN_WDNOTWANTED;
 		    else {
 			new_deleg->ls_stateid.seqid = delegstateidp->seqid = 1;
 			new_deleg->ls_stateid.other[0] = delegstateidp->other[0]
@@ -3127,16 +3128,17 @@ tryagain:
 		    /*
 		     * This is where we can choose to issue a delegation.
 		     */
-		    if (delegate == 0 || (writedeleg == 0 && readonly == 0) ||
-			!NFSVNO_DELEGOK(vp) ||
+		    if ((new_stp->ls_flags & NFSLCK_WANTNODELEG) != 0)
+			*rflagsp |= NFSV4OPEN_WDNOTWANTED;
+		    else if (nfsrv_issuedelegs == 0)
+			*rflagsp |= NFSV4OPEN_WDSUPPFTYPE;
+		    else if (NFSRV_V4DELEGLIMIT(nfsrv_delegatecnt))
+			*rflagsp |= NFSV4OPEN_WDRESOURCE;
+		    else if (delegate == 0 || (writedeleg == 0 &&
+			readonly == 0) || !NFSVNO_DELEGOK(vp) ||
 			(clp->lc_flags & (LCL_CALLBACKSON | LCL_CBDOWN)) !=
 			 LCL_CALLBACKSON)
 			*rflagsp |= NFSV4OPEN_WDCONTENTION;
-		    else if (nfsrv_issuedelegs == 0 ||
-			NFSRV_V4DELEGLIMIT(nfsrv_delegatecnt))
-			*rflagsp |= NFSV4OPEN_WDRESOURCE;
-		    else if ((new_stp->ls_flags & NFSLCK_WANTNODELEG) != 0)
-			*rflagsp |= NFSV4OPEN_WDNOTWANTED;
 		    else {
 			new_deleg->ls_stateid.seqid = delegstateidp->seqid = 1;
 			new_deleg->ls_stateid.other[0] = delegstateidp->other[0]
@@ -6042,6 +6044,44 @@ nfsrv_destroysession(struct nfsrv_descript *nd, uint8_t *sessionid)
 	NFSLOCKV4ROOTMUTEX();
 	nfsv4_unlock(&nfsv4rootfs_lock, 1);
 	NFSUNLOCKV4ROOTMUTEX();
+	return (error);
+}
+
+/*
+ * Bind a connection to a session.
+ * For now, only certain variants are supported, since the current session
+ * structure can only handle a single backchannel entry, which will be
+ * applied to all connections if it is set.
+ */
+int
+nfsrv_bindconnsess(uint8_t *sessionid, int *foreaftp)
+{
+	struct nfssessionhash *shp;
+	struct nfsdsession *sep;
+	int error;
+
+	error = 0;
+	shp = NFSSESSIONHASH(sessionid);
+	NFSLOCKSESSION(shp);
+	sep = nfsrv_findsession(sessionid);
+	if (sep != NULL) {
+		if ((sep->sess_crflags & NFSV4CRSESS_CONNBACKCHAN) != 0) {
+			/* Can only handle backchannel cases. */
+			if (*foreaftp == NFSCDFC4_FORE_OR_BOTH ||
+			    *foreaftp == NFSCDFC4_BACK_OR_BOTH)
+				*foreaftp = NFSCDFS4_BOTH;
+			else
+				error = NFSERR_NOTSUPP;
+		} else {
+			if (*foreaftp == NFSCDFC4_FORE ||
+			    *foreaftp == NFSCDFC4_FORE_OR_BOTH)
+				*foreaftp = NFSCDFS4_FORE;
+			else
+				error = NFSERR_NOTSUPP;
+		}
+	} else
+		error = NFSERR_BADSESSION;
+	NFSUNLOCKSESSION(shp);
 	return (error);
 }
 
